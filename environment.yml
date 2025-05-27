@@ -1,0 +1,12 @@
+name: disertatie # This will become the name of your environment
+dependencies: # The list of packages to include in your environment
+    - python=3.12 # You can specify versions
+    - numpy
+    - gymnasium
+    - matplotlib
+    - graphviz
+    - python-graphviz
+    - gymnasium-classic_control
+    - pip # Install pip in your environment
+    - pip: # Include pip dependencies last
+        - neat-python
