@@ -70,6 +70,8 @@ vision_segments = [
     # ((-5 * math.pi / 6, -math.pi / 2), (255, 192, 203)),
 ]
 
+view_ranges = [MIN_VISION_RANGE, MIDDLE_VISION_RANGE, MAX_VISION_RANGE]
+
 
 REWARD_TYPE = 'coverage'  # 'action', 'coverage', 'aggregation'
 TRACK_TRAIL = 'all'  # 'all', 'fade', 'none'
@@ -334,17 +336,15 @@ class Ant():
         self.V_f = None
         self.V_f_r2 = None
         self.V_f_r1 = None
-        self.V_b_r = None
-        self.V_b = None
-        self.V_b_l = None
         self.vision_range = MAX_VISION_RANGE
 
         # Initialize distance attributes for each vision segment
         self.composite_scores = {}
         self.wall_distances = {}
         self.nearest_ant_distances = {}
+        # areas delimited by vision segments and vision ranges (portion of a pie slice)
+        self.density_areas = {}
 
-        self.pheromone = 0.0
 
         # Arena information
         self.arena_center = arena_center
@@ -568,6 +568,12 @@ class Ant():
             self.V_f_l1, self.V_f_l2, self.V_f, self.V_f_r2,self.V_f_r1,
         ) = scaled_vision
 
+    def _get_fitting_vision_range_index(self, distance: float, vision_ranges: list):
+        for i in range(len(vision_ranges)):
+            if distance <= vision_ranges[i]:
+                return i
+        return None
+
     def _detect_nearby_ants(self, other_ants):
         """
         Detects other ants within vision range and categorizes them into vision segments.
@@ -580,10 +586,17 @@ class Ant():
         """
         # Pre-calculate common values
         vision_range_squared = self.vision_range ** 2
+        view_ranges_squared = [view_range ** 2 for view_range in view_ranges]
         segment_names = ('forward_l1', 'forward_l2', 'forward', 'forward_r2','forward_r1')
 
         # Initialize detected_ants with empty lists using dict comprehension
         detected_ants = {name: [] for name in segment_names}
+        # Initialize density_areas to count number of ants in area
+        density_areas = {}
+        for segment_name in segment_names:
+            density_areas[segment_name] = []
+            for i in range(len(view_ranges)):
+                density_areas[segment_name].append({'ants': 0})
 
         # Pre-calculate segment boundaries once
         segment_boundaries = []
@@ -599,6 +612,7 @@ class Ant():
             dx = ant_x - pos_x
             dy = ant_y - pos_y
             distance_squared = dx * dx + dy * dy
+            fiting_view_range_idx = self._get_fitting_vision_range_index(distance_squared, view_ranges_squared)
 
             if distance_squared <= vision_range_squared:
                 # Only calculate angle for ants within range
@@ -609,13 +623,15 @@ class Ant():
                     if start_angle < stop_angle:
                         if start_angle <= angle_to_ant <= stop_angle:
                             detected_ants[segment_name].append((ant_x, ant_y, angle_to_ant))
+                            density_areas[segment_name][fiting_view_range_idx]['ants'] += 1
                             break
                     elif angle_to_ant >= start_angle or angle_to_ant <= stop_angle:
                         # Angle wraps around 2π boundary
                         detected_ants[segment_name].append((ant_x, ant_y, angle_to_ant))
+                        density_areas[segment_name][fiting_view_range_idx]['ants'] += 1
                         break
 
-        return detected_ants
+        return detected_ants, density_areas
 
     def set_pheromone(self, pheromone):
         self.pheromone = pheromone
@@ -701,7 +717,8 @@ class Ant():
                 vision segment data, and pheromone levels.
         """
         if others is not None:
-            detected_ants = self._detect_nearby_ants(others)
+            detected_ants, density_areas = self._detect_nearby_ants(others)
+            self.density_areas = density_areas
             self._detect_vision(detected_ants, len(others))
             self._detect_distances(detected_ants)
 
@@ -720,10 +737,6 @@ class Ant():
             self.V_f,  # Vision segment: Forward
             self.V_f_r2,  # Vision segment: Forward Right 2
             self.V_f_r1,  # Vision segment: Forward Right 1
-            self.V_b_r,  # Vision segment: Backward Right
-            self.V_b,  # Vision segment: Backward
-            self.V_b_l,  # Vision segment: Backward Left
-            self.pheromone  # Current pheromone level
         ]
 
         # Include composite scores for each vision segment
@@ -1120,6 +1133,13 @@ class AntDynamicsEnv(gym.Env):
 
         return obs, reward, False, truncated, info
 
+    @staticmethod
+    def _draw_text(canvas: pygame.Surface, font: pygame.font, x: int, y: int, text: str, color: tuple[int, int, int]):
+        text = font.render(text, True, color)
+        text_rect = text.get_rect()
+        text_rect.center = (x,y)
+        canvas.blit(text, text_rect)
+
     def render(self, mode=None):
         if mode is not None:
             self.render_mode = mode
@@ -1158,10 +1178,16 @@ class AntDynamicsEnv(gym.Env):
                 (int(self.ant.pos.x), int(self.ant.pos.y)),
                 MAX_VISION_RANGE
             )
-            for (start_angle, stop_angle), colour in vision_segments:
+
+            segment_names = ('forward_l1', 'forward_l2', 'forward', 'forward_r2', 'forward_r1')
+            font = pygame.font.SysFont('Arial', 9)
+
+            for i in range(len(vision_segments)):
+                (angle_range_start, angle_range_end), colour = vision_segments[i]
                 # Calculate start and stop angles, normalized to 0 to 2*pi
-                start_angle = (self.ant.theta + start_angle) % (2 * math.pi)
-                stop_angle = (self.ant.theta + stop_angle) % (2 * math.pi)
+                start_angle = (self.ant.theta + angle_range_start) % (2 * math.pi)
+                stop_angle = (self.ant.theta + angle_range_end) % (2 * math.pi)
+                central_angle = (self.ant.theta + (angle_range_start + angle_range_end) / 2) % (2 * math.pi)
 
                 # Draw lines delimiting the vision segments
                 pygame.draw.line(
@@ -1184,15 +1210,26 @@ class AntDynamicsEnv(gym.Env):
                     )
                 )
 
-                #Draw arcs delimiting the vision ranges
-                vision_ranges = [MIN_VISION_RANGE, MIDDLE_VISION_RANGE, MAX_VISION_RANGE]
+                for j in range(len(view_ranges)):
+                    view_range = view_ranges[j]
 
-                for vision_range in vision_ranges:
+                    # display number of entities in each density area in the center of the area
+                    draw_distance =  view_range / 2 if j <= 0 else view_ranges[j - 1] + (view_range - view_ranges[j - 1]) / 2
+                    self._draw_text(
+                        canvas,
+                        font,
+                        int(self.ant.pos.x + np.cos(central_angle) * draw_distance),
+                        int(self.ant.pos.y + np.sin(central_angle) * draw_distance),
+                        f"{self.ant.density_areas[segment_names[i]][j]['ants']}",
+                        (0, 0, 0)
+                    )
+
+                    # Draw arcs delimiting the vision ranges and density areas
                     pygame.draw.arc(
                         canvas,
                         colour,
-                        (int(self.ant.pos.x - vision_range), int(self.ant.pos.y - vision_range), vision_range * 2,
-                         vision_range * 2),
+                        (int(self.ant.pos.x - view_range), int(self.ant.pos.y - view_range), view_range * 2,
+                         view_range * 2),
                 # To align to pygame where angles increase clockwise, we needed to inverse the values
                         -stop_angle,
                         -start_angle
