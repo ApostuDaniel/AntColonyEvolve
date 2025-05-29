@@ -38,7 +38,10 @@ TIME_LIMIT = SIM_FPS * 30  # 60 seconds
 ANT_DIM = vec2d(5, 5)
 AGENT_SPEED = 120.00  # Maximum ant speed observed in data (pixels)
 TURN_RATE = 0.3575  # Maximum turning rate observed in data (radians)
-VISION_RANGE = 100  # No idea what is a reasonable value for this.
+MAX_VISION_RANGE = 60
+MIDDLE_VISION_RANGE = 40
+MIN_VISION_RANGE = 20
+
 
 DRAW_ANT_VISION = True
 # DRAW_PHEROMONES = False
@@ -58,13 +61,15 @@ vision_segments = [
     ((math.pi / 10, 3 * math.pi / 10), (0, 255, 0)),
     # Sky blue, cool and calm
     ((3 * math.pi / 10, math.pi / 2), (0, 0, 255)),
-    # Deep indigo, mysterious and strong
-    ((-9 * math.pi / 6, -7 * math.pi / 6), (75, 0, 130)),
-    # Soft violet, dreamy and delicate
-    ((-7 * math.pi / 6, -5 * math.pi / 6), (238, 130, 238)),
-    # Soft pink, gentle and warm
-    ((-5 * math.pi / 6, -math.pi / 2), (255, 192, 203)),
+    # Remove backwards detection zones
+    # # Deep indigo, mysterious and strong
+    # ((-9 * math.pi / 6, -7 * math.pi / 6), (75, 0, 130)),
+    # # Soft violet, dreamy and delicate
+    # ((-7 * math.pi / 6, -5 * math.pi / 6), (238, 130, 238)),
+    # # Soft pink, gentle and warm
+    # ((-5 * math.pi / 6, -math.pi / 2), (255, 192, 203)),
 ]
+
 
 REWARD_TYPE = 'coverage'  # 'action', 'coverage', 'aggregation'
 TRACK_TRAIL = 'all'  # 'all', 'fade', 'none'
@@ -332,7 +337,7 @@ class Ant():
         self.V_b_r = None
         self.V_b = None
         self.V_b_l = None
-        self.vision_range = VISION_RANGE
+        self.vision_range = MAX_VISION_RANGE
 
         # Initialize distance attributes for each vision segment
         self.composite_scores = {}
@@ -357,7 +362,7 @@ class Ant():
         """
         segment_names = [
             'forward_l1', 'forward_l2', 'forward', 'forward_r2',
-            'forward_r1', 'backward_r', 'backward', 'backward_l'
+            'forward_r1'
         ]
         return segment_names[idx]
 
@@ -543,9 +548,6 @@ class Ant():
             len(detected_ants['forward']),
             len(detected_ants['forward_r2']),
             len(detected_ants['forward_r1']),
-            len(detected_ants['backward_r']),
-            len(detected_ants['backward']),
-            len(detected_ants['backward_l'])
         ]
 
         scaled_vision = []
@@ -563,8 +565,7 @@ class Ant():
 
         # Assign the scaled values to the instance variables
         (
-            self.V_f_l1, self.V_f_l2, self.V_f, self.V_f_r2,
-            self.V_f_r1, self.V_b_r, self.V_b, self.V_b_l
+            self.V_f_l1, self.V_f_l2, self.V_f, self.V_f_r2,self.V_f_r1,
         ) = scaled_vision
 
     def _detect_nearby_ants(self, other_ants):
@@ -579,8 +580,7 @@ class Ant():
         """
         # Pre-calculate common values
         vision_range_squared = self.vision_range ** 2
-        segment_names = ('forward_l1', 'forward_l2', 'forward', 'forward_r2',
-                         'forward_r1', 'backward_r', 'backward', 'backward_l')
+        segment_names = ('forward_l1', 'forward_l2', 'forward', 'forward_r2','forward_r1')
 
         # Initialize detected_ants with empty lists using dict comprehension
         detected_ants = {name: [] for name in segment_names}
@@ -1130,7 +1130,7 @@ class AntDynamicsEnv(gym.Env):
         if self.window is None and self.render_mode == 'human':
             pygame.init()
             pygame.display.init()
-            pygame.display.set_caption('WANNts')
+            pygame.display.set_caption('Ant Colony Evolution')
             self.window = pygame.display.set_mode(
                 (SCREEN_W, SCREEN_H)
             )
@@ -1156,22 +1156,47 @@ class AntDynamicsEnv(gym.Env):
                 canvas,
                 (225, 225, 230, 255),
                 (int(self.ant.pos.x), int(self.ant.pos.y)),
-                VISION_RANGE
+                MAX_VISION_RANGE
             )
             for (start_angle, stop_angle), colour in vision_segments:
                 # Calculate start and stop angles, normalized to 0 to 2*pi
                 start_angle = (self.ant.theta + start_angle) % (2 * math.pi)
                 stop_angle = (self.ant.theta + stop_angle) % (2 * math.pi)
 
+                # Draw lines delimiting the vision segments
                 pygame.draw.line(
                     canvas,
                     colour,
                     (int(self.ant.pos.x), int(self.ant.pos.y)),
                     (
-                        int(self.ant.pos.x + np.cos(start_angle) * VISION_RANGE),
-                        int(self.ant.pos.y + np.sin(start_angle) * VISION_RANGE)
+                        int(self.ant.pos.x + np.cos(start_angle) * MAX_VISION_RANGE),
+                        int(self.ant.pos.y + np.sin(start_angle) * MAX_VISION_RANGE)
                     )
                 )
+
+                pygame.draw.line(
+                    canvas,
+                    colour,
+                    (int(self.ant.pos.x), int(self.ant.pos.y)),
+                    (
+                        int(self.ant.pos.x + np.cos(stop_angle) * MAX_VISION_RANGE),
+                        int(self.ant.pos.y + np.sin(stop_angle) * MAX_VISION_RANGE)
+                    )
+                )
+
+                #Draw arcs delimiting the vision ranges
+                vision_ranges = [MIN_VISION_RANGE, MIDDLE_VISION_RANGE, MAX_VISION_RANGE]
+
+                for vision_range in vision_ranges:
+                    pygame.draw.arc(
+                        canvas,
+                        colour,
+                        (int(self.ant.pos.x - vision_range), int(self.ant.pos.y - vision_range), vision_range * 2,
+                         vision_range * 2),
+                # To align to pygame where angles increase clockwise, we needed to inverse the values
+                        -stop_angle,
+                        -start_angle
+                    )
 
         # Draw wall distance indicators
         # for segment, distance in self.ant.wall_distances.items():
@@ -1201,20 +1226,20 @@ class AntDynamicsEnv(gym.Env):
             distance, angle = distance_info
             if distance is not None and distance != 0.0:
                 # Calculate the central angle of the segment
-                segment_idx = ['forward_l1', 'forward_l2', 'forward', 'forward_r2',
-                               'forward_r1', 'backward_r', 'backward', 'backward_l'].index(segment)
-                angle_range, _ = vision_segments[segment_idx]
-                central_angle = (angle_range[0] + angle_range[1]) / 2
-                central_angle = (self.ant.theta + central_angle) % (2 * math.pi)
+                segment_idx = ['forward_l1', 'forward_l2', 'forward', 'forward_r2','forward_r1'].index(segment)
+                angle_range, segment_color = vision_segments[segment_idx]
+                # TODO: remove central angle calculation
+                # central_angle = (angle_range[0] + angle_range[1]) / 2
+                # central_angle = (self.ant.theta + central_angle) % (2 * math.pi)
 
                 # Calculate end point based on nearest ant distance
-                end_x = int(self.ant.pos.x + math.cos(angle) * (1 - distance) * VISION_RANGE)
-                end_y = int(self.ant.pos.y + math.sin(angle) * (1 - distance) * VISION_RANGE)
+                end_x = int(self.ant.pos.x + math.cos(angle) * (1 - distance) * MAX_VISION_RANGE)
+                end_y = int(self.ant.pos.y + math.sin(angle) * (1 - distance) * MAX_VISION_RANGE)
 
                 # Draw a line from the ant to the nearest ant
                 pygame.draw.line(
                     canvas,
-                    (0, 0, 0),  # black color for nearest ant distance
+                    segment_color,  # black color for nearest ant distance
                     (int(self.ant.pos.x), int(self.ant.pos.y)),
                     (end_x, end_y),
                     1
