@@ -473,7 +473,8 @@ class Ant():
             central_angle = ((self.theta + sum(angle_range) / 2) % (2 * math.pi))
 
             # Initialize scaled distances
-            wall_distance_scaled = ant_distance_scaled = 0.0
+            wall_distance_scaled = 0.0
+            ant_distance_scaled = (0.0,0)
 
             # Get wall distance
             # compute_distance_to_wall already returns the distance scaled
@@ -487,19 +488,20 @@ class Ant():
             if ants_in_segment:
                 # Use generator expression instead of list comprehension for efficiency
                 raw_ant_distance = min(
-                    (math.hypot(ant[0] - self.pos.x, ant[1] - self.pos.y)
+                    ((math.hypot(ant[0] - self.pos.x, ant[1] - self.pos.y), ant[2])
                      for ant in ants_in_segment),
+                    key=lambda x: x[0],
                     default=None
                 )
 
-                if raw_ant_distance is not None and raw_ant_distance <= self.vision_range:
-                    ant_distance_scaled = 1.0 - (raw_ant_distance / self.vision_range)
+                if raw_ant_distance is not None and raw_ant_distance[0] <= self.vision_range:
+                    ant_distance_scaled = 1.0 - (raw_ant_distance[0] / self.vision_range), raw_ant_distance[1]
 
             # TODO: remove composite scores
             # Determine composite score based on closest object
-            if ant_distance_scaled > 0 and (wall_distance_scaled == 0 or
-                                            raw_ant_distance < raw_wall_distance):
-                composite_score = ant_distance_scaled  # Positive for ants
+            if ant_distance_scaled[0] > 0 and (wall_distance_scaled == 0 or
+                                            raw_ant_distance[0] < raw_wall_distance):
+                composite_score = ant_distance_scaled[0]  # Positive for ants
             elif wall_distance_scaled > 0:
                 composite_score = -wall_distance_scaled  # Negative for walls
             else:
@@ -606,11 +608,11 @@ class Ant():
                 for start_angle, stop_angle, segment_name in segment_boundaries:
                     if start_angle < stop_angle:
                         if start_angle <= angle_to_ant <= stop_angle:
-                            detected_ants[segment_name].append((ant_x, ant_y))
+                            detected_ants[segment_name].append((ant_x, ant_y, angle_to_ant))
                             break
                     elif angle_to_ant >= start_angle or angle_to_ant <= stop_angle:
                         # Angle wraps around 2π boundary
-                        detected_ants[segment_name].append((ant_x, ant_y))
+                        detected_ants[segment_name].append((ant_x, ant_y, angle_to_ant))
                         break
 
         return detected_ants
@@ -750,6 +752,7 @@ class Ant():
 
 class AntDynamicsEnv(gym.Env):
     metadata = {
+        'name': 'ant-colony-v0',
         'render_modes': ['human', 'rgb_array'],
         'render_fps': SIM_FPS
     }
@@ -1068,7 +1071,7 @@ class AntDynamicsEnv(gym.Env):
             obs = self.get_observations()
         info = {
             'wall_distances': self.ant.wall_distances,
-            'nearest_ant_distances': self.ant.nearest_ant_distances
+            'nearest_ant_distances': self.ant.nearest_ant_distances,
         }
 
         if self.render_mode == 'human':
@@ -1206,7 +1209,7 @@ class AntDynamicsEnv(gym.Env):
         # Additional information (if necessary)
         info = {
             'wall_distances': self.ant.wall_distances,
-            'nearest_ant_distances': self.ant.nearest_ant_distances
+            'nearest_ant_distances': self.ant.nearest_ant_distances,
         }
 
         return obs, reward, False, truncated, info
@@ -1334,8 +1337,9 @@ class AntDynamicsEnv(gym.Env):
         #         )
 
         # Draw nearest ant distance indicators
-        for segment, distance in self.ant.nearest_ant_distances.items():
-            if distance is not None:
+        for segment, distance_info in self.ant.nearest_ant_distances.items():
+            distance, angle = distance_info
+            if distance is not None and distance != 0.0:
                 # Calculate the central angle of the segment
                 segment_idx = ['forward_l1', 'forward_l2', 'forward', 'forward_r2',
                                'forward_r1', 'backward_r', 'backward', 'backward_l'].index(segment)
@@ -1344,13 +1348,13 @@ class AntDynamicsEnv(gym.Env):
                 central_angle = (self.ant.theta + central_angle) % (2 * math.pi)
 
                 # Calculate end point based on nearest ant distance
-                end_x = int(self.ant.pos.x + math.cos(central_angle) * distance)
-                end_y = int(self.ant.pos.y + math.sin(central_angle) * distance)
+                end_x = int(self.ant.pos.x + math.cos(angle) * (1 - distance) * VISION_RANGE)
+                end_y = int(self.ant.pos.y + math.sin(angle) * (1 - distance) * VISION_RANGE)
 
                 # Draw a line from the ant to the nearest ant
                 pygame.draw.line(
                     canvas,
-                    (0, 255, 0),  # Green color for nearest ant distance
+                    (0, 0, 0),  # black color for nearest ant distance
                     (int(self.ant.pos.x), int(self.ant.pos.y)),
                     (end_x, end_y),
                     1
