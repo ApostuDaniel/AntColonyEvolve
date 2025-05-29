@@ -812,17 +812,6 @@ class AntDynamicsEnv(gym.Env):
             dtype=np.float32
         )
 
-        # TODO: This might be usefull when adding pheromones
-        # Initialize pheromone tracking
-        # self.pheromone_grid = np.zeros((50, 50), dtype=np.float32)
-        # self.pheromone_decay_rate = 0.01
-        # self.pheromone_deposition_rate = 0.1
-        # self.bounding_box_coarse = max(1, math.ceil(5 / (SCREEN_W / 50)))
-        # half_box = self.bounding_box_coarse // 2
-        # self.relative_indices = [(dy, dx)
-        #                          for dy in range(-half_box, half_box + 1)
-        #                          for dx in range(-half_box, half_box + 1)]
-
     def seed(self, seed=None):
         return seeding.np_random(seed)
 
@@ -912,89 +901,6 @@ class AntDynamicsEnv(gym.Env):
 
         return overlapping_cells
 
-# TODO: this also might be usefull for phermone introduction
-
-    # def _update_pheromone_grid(self):
-    #     """Update pheromone grid based on current ant positions"""
-    #     # Apply decay
-    #     self.pheromone_grid *= (1.0 - self.pheromone_decay_rate)
-    #
-    #     # Get all ant positions
-    #     ant_positions = [(self.ant.pos.x, self.ant.pos.y)]
-    #     if self.other_ants is not None:
-    #         ant_positions.extend([(x, y) for x, y in self.other_ants[:, self.t]])
-    #
-    #     # Update grid for each ant
-    #     coarse_width, coarse_height = 50, 50  # Coarse grid size
-    #     factor_x = SCREEN_W / coarse_width
-    #     factor_y = SCREEN_H / coarse_height
-    #
-    #     for x_fine, y_fine in ant_positions:
-    #         if np.isnan(x_fine) or np.isnan(y_fine):
-    #             continue
-    #
-    #         x_coarse = int(x_fine // factor_x)
-    #         y_coarse = int(y_fine // factor_y)
-    #
-    #         if x_coarse < 0 or x_coarse >= coarse_width or y_coarse < 0 or y_coarse >= coarse_height:
-    #             continue
-    #
-    #         # Apply deposition in bounding box
-    #         for dy, dx in self.relative_indices:
-    #             x = x_coarse + dx
-    #             y = y_coarse + dy
-    #             if 0 <= x < coarse_width and 0 <= y < coarse_height:
-    #                 self.pheromone_grid[y, x] += self.pheromone_deposition_rate
-
-# TODO: this also might be usefull for phermone introduction
-
-#     def _get_average_pheromone_vectorized(
-#             self,
-#             pos: tuple,
-#             snapshot_index: int,
-#             bounding_box: int = 5,
-#             grid_size: tuple = (900, 900),
-#             coarse_grid_size: tuple = (20, 20)
-#     ) -> tuple:
-#         """
-#         Vectorized version to identify overlapping grid cells and compute average pheromone intensity.
-#
-#         Parameters:
-#         - Same as previous function.
-#
-#         Returns:
-#         - overlapping_cells (list of tuples)
-#         - average_pheromone (float)
-#         """
-#
-#         # Identify overlapping grid cells
-#         overlapping_cells = self._identify_overlapping_grid_cells(
-#             pos=pos,
-#             bounding_box=bounding_box,
-#             grid_size=grid_size,
-#             coarse_grid_size=coarse_grid_size
-#         )
-#
-#         if not overlapping_cells:
-#             # No overlapping cells, possibly ant is outside the grid
-#             average_pheromone = 0.0
-#             return overlapping_cells, average_pheromone
-#
-#         # Convert list of tuples to separate row and column arrays
-#         rows, cols = zip(*overlapping_cells)  # Unzips the list of tuples
-#
-#         # Retrieve pheromone intensities
-#         if LOAD_PHEROMONES:
-#             if snapshot_index < 0 or snapshot_index >= self.pheromone_data.shape[0]:
-#                 return overlapping_cells, 0.0
-#             pheromone_values = self.pheromone_data[snapshot_index, rows, cols]
-#         else:
-#             pheromone_values = self.pheromone_grid[rows, cols]
-#
-#         # Compute average pheromone intensity
-#         average_pheromone = np.mean(pheromone_values) if pheromone_values.size > 0 else 0.0
-#
-#         return overlapping_cells, average_pheromone
 
     def _angle_difference(self, angle1, angle2):
         """
@@ -1244,52 +1150,6 @@ class AntDynamicsEnv(gym.Env):
             (int(self.ant_arena.arena_center.x), int(self.ant_arena.arena_center.y)),  # center of the arena
             int(self.ant_arena.arena_radius)  # Radius
         )
-
-        # TODO: This might be usefull when adding pheromones
-
-        # if DRAW_PHEROMONES:
-        #     # ---- Begin Pheromone Visualization ----
-        #     if LOAD_PHEROMONES:
-        #         # Calculate the adjusted snapshot index based on time_offset
-        #         adjusted_time = self.t + self.time_offset
-        #         snapshot_index = (adjusted_time // self.frames_per_snapshot)
-        #
-        #         # Ensure the snapshot index is within bounds
-        #         max_snapshot_index = type(self).pheromone_data.shape[0] - 1
-        #         snapshot_index = min(snapshot_index, max_snapshot_index)
-        #
-        #         pheromone_map = type(self).pheromone_data[snapshot_index]
-        #     else:
-        #         pheromone_map = self.pheromone_grid
-        #
-        #     # Normalize and convert to 8-bit grayscale
-        #     pheromone_map_scaled = (pheromone_map * 255).astype(np.uint8)
-        #
-        #     # Convert to RGB by stacking the grayscale values
-        #     pheromone_map_rgb = np.stack([pheromone_map_scaled] * 3, axis=-1)
-        #     pheromone_map_rgb_T = np.transpose(pheromone_map_rgb, (1, 0, 2))  # (50, 50, 3)
-        #
-        #     # Create a new surface for pheromone data
-        #     pheromone_surface = pygame.surfarray.make_surface(pheromone_map_rgb_T)
-        #     pheromone_surface = pygame.transform.scale(pheromone_surface, (SCREEN_W, SCREEN_H))
-        #
-        #     # Mask out the outside area by setting alpha to zero outside the circle
-        #     mask_surface = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
-        #     mask_surface.fill((0, 0, 0, 0))  # Fully transparent
-        #
-        #     pygame.draw.circle(
-        #         mask_surface,
-        #         (255, 255, 255, 255),  # Fully opaque within the arena
-        #         (int(self.ant_arena[0][0]), int(self.ant_arena[0][1])),
-        #         int(self.ant_arena[1])
-        #     )
-        #
-        #     # Apply the mask to the pheromone surface
-        #     pheromone_surface.blit(mask_surface, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
-        #
-        #     # Blit the masked pheromone surface onto the canvas
-        #     canvas.blit(pheromone_surface, (0, 0))
-        #     # ---- End Pheromone Visualization ----
 
         if DRAW_ANT_VISION:
             pygame.draw.circle(
