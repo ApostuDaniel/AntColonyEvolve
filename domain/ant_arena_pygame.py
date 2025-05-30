@@ -3,11 +3,8 @@ import sys, math
 from collections import namedtuple
 import numpy as np
 import pygame
-import random
-import lzma
-import os
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 import gymnasium as gym
 from gymnasium import spaces
@@ -49,25 +46,26 @@ DRAW_ANT_VISION = True
 # LOAD_ANTS = True  # Whether to load real ant data or use empty list
 # LOAD_PHEROMONES = False  # Whether to load pheromone data or calculate in real-time
 
+
 vision_segments = [
     # Front arc: Directly in front of the agent
     # Bright red, intense and strong
-    ((-math.pi / 2, -3 * math.pi / 10), (255, 0, 0)),
+    ((-math.pi / 2, -3 * math.pi / 10), (255, 0, 0), 'forward_l1'),
     # Vivid orange, warm and energetic
-    ((-3 * math.pi / 10, -math.pi / 10), (255, 165, 0)),
+    ((-3 * math.pi / 10, -math.pi / 10), (255, 165, 0), 'forward_l2'),
     # Bright yellow, cheerful and vibrant
-    ((-math.pi / 10, math.pi / 10), (255, 255, 0)),
+    ((-math.pi / 10, math.pi / 10), (255, 255, 0), 'forward'),
     # Bright green, fresh and lively
-    ((math.pi / 10, 3 * math.pi / 10), (0, 255, 0)),
+    ((math.pi / 10, 3 * math.pi / 10), (0, 255, 0), 'forward_r2'),
     # Sky blue, cool and calm
-    ((3 * math.pi / 10, math.pi / 2), (0, 0, 255)),
+    ((3 * math.pi / 10, math.pi / 2), (0, 0, 255), 'forward_r1'),
     # Remove backwards detection zones
     # # Deep indigo, mysterious and strong
-    # ((-9 * math.pi / 6, -7 * math.pi / 6), (75, 0, 130)),
+    # ((-9 * math.pi / 6, -7 * math.pi / 6), (75, 0, 130), 'backward_r1'),
     # # Soft violet, dreamy and delicate
-    # ((-7 * math.pi / 6, -5 * math.pi / 6), (238, 130, 238)),
+    # ((-7 * math.pi / 6, -5 * math.pi / 6), (238, 130, 238), 'backward'),
     # # Soft pink, gentle and warm
-    # ((-5 * math.pi / 6, -math.pi / 2), (255, 192, 203)),
+    # ((-5 * math.pi / 6, -math.pi / 2), (255, 192, 203), 'backward_l1'),
 ]
 
 view_ranges = [MIN_VISION_RANGE, MIDDLE_VISION_RANGE, MAX_VISION_RANGE]
@@ -350,22 +348,6 @@ class Ant():
         self.arena_center = arena_center
         self.arena_radius = arena_radius
 
-    def _get_segment_name(self, idx):
-        """
-        Returns the segment name based on its index.
-
-        Parameters:
-        - idx (int): Index of the vision segment.
-
-        Returns:
-        - str: Name of the vision segment.
-        """
-        segment_names = [
-            'forward_l1', 'forward_l2', 'forward', 'forward_r2',
-            'forward_r1'
-        ]
-        return segment_names[idx]
-
     def _compute_distance_to_wall(self, angle):
         """
         Compute the normalized distance from the ant's current position to the arena wall
@@ -471,9 +453,7 @@ class Ant():
         Detect distances to walls and ants, and compute a hierarchical composite score for each segment.
         Returns distances as positive values for ants and negative values for walls, prioritizing the closest object.
         """
-        for idx, (angle_range, _) in enumerate(vision_segments):
-            segment_name = self._get_segment_name(idx)
-
+        for idx, (angle_range, _, _) in enumerate(vision_segments):
             # Calculate central angle once
             central_angle = ((self.theta + sum(angle_range) / 2) % (2 * math.pi))
 
@@ -489,7 +469,7 @@ class Ant():
             wall_distance_scaled = 1.0 - raw_wall_distance
 
             # Get ant distance
-            ants_in_segment = detected_ants.get(segment_name, [])
+            ants_in_segment = detected_ants.get(idx, [])
             if ants_in_segment:
                 # Use generator expression instead of list comprehension for efficiency
                 raw_ant_distance = min(
@@ -513,9 +493,9 @@ class Ant():
                 composite_score = 0.0
 
             # Store all scores at once
-            self.composite_scores[segment_name] = composite_score
-            self.wall_distances[segment_name] = wall_distance_scaled
-            self.nearest_ant_distances[segment_name] = ant_distance_scaled
+            self.composite_scores[idx] = composite_score
+            self.wall_distances[idx] = wall_distance_scaled
+            self.nearest_ant_distances[idx] = ant_distance_scaled
 
     def _detect_vision(self, detected_ants: dict, total_colony_size: int, max_value: float = 1.0):
         """
@@ -542,13 +522,7 @@ class Ant():
         # Constant k to ensure the scaled value reaches ~99% of max_value at adjusted_fraction = 1
         k = 4.60517  # k = -ln(0.01)
 
-        vision_counts = [
-            len(detected_ants['forward_l1']),
-            len(detected_ants['forward_l2']),
-            len(detected_ants['forward']),
-            len(detected_ants['forward_r2']),
-            len(detected_ants['forward_r1']),
-        ]
+        vision_counts = [len(detected_ants[i]) for i in range(len(vision_segments))]
 
         scaled_vision = []
         for ants_detected in vision_counts:
@@ -587,23 +561,19 @@ class Ant():
         # Pre-calculate common values
         vision_range_squared = self.vision_range ** 2
         view_ranges_squared = [view_range ** 2 for view_range in view_ranges]
-        segment_names = ('forward_l1', 'forward_l2', 'forward', 'forward_r2','forward_r1')
 
         # Initialize detected_ants with empty lists using dict comprehension
-        detected_ants = {name: [] for name in segment_names}
+        detected_ants = {segment_idx: [] for segment_idx in range(len(vision_segments))}
         # Initialize density_areas to count number of ants in area
-        density_areas = {}
-        for segment_name in segment_names:
-            density_areas[segment_name] = []
-            for i in range(len(view_ranges)):
-                density_areas[segment_name].append({'ants': 0})
+        density_areas = {segment_idx: [{'ants': 0} for _ in range(len(view_ranges))]
+                         for segment_idx in range(len(vision_segments))}
 
         # Pre-calculate segment boundaries once
         segment_boundaries = []
-        for idx, (angle_range, _) in enumerate(vision_segments):
+        for idx, (angle_range, _, _) in enumerate(vision_segments):
             start = (self.theta + angle_range[0]) % (2 * math.pi)
             stop = (self.theta + angle_range[1]) % (2 * math.pi)
-            segment_boundaries.append((start, stop, segment_names[idx]))
+            segment_boundaries.append((start, stop, idx))
 
         # Process each ant
         pos_x, pos_y = self.pos.x, self.pos.y
@@ -612,23 +582,23 @@ class Ant():
             dx = ant_x - pos_x
             dy = ant_y - pos_y
             distance_squared = dx * dx + dy * dy
-            fiting_view_range_idx = self._get_fitting_vision_range_index(distance_squared, view_ranges_squared)
+            fitting_view_range_idx = self._get_fitting_vision_range_index(distance_squared, view_ranges_squared)
 
             if distance_squared <= vision_range_squared:
                 # Only calculate angle for ants within range
                 angle_to_ant = math.atan2(dy, dx) % (2 * math.pi)
 
                 # Find matching segment
-                for start_angle, stop_angle, segment_name in segment_boundaries:
+                for start_angle, stop_angle, segment_idx in segment_boundaries:
                     if start_angle < stop_angle:
                         if start_angle <= angle_to_ant <= stop_angle:
-                            detected_ants[segment_name].append((ant_x, ant_y, angle_to_ant))
-                            density_areas[segment_name][fiting_view_range_idx]['ants'] += 1
+                            detected_ants[segment_idx].append((ant_x, ant_y, angle_to_ant))
+                            density_areas[segment_idx][fitting_view_range_idx]['ants'] += 1
                             break
                     elif angle_to_ant >= start_angle or angle_to_ant <= stop_angle:
                         # Angle wraps around 2π boundary
-                        detected_ants[segment_name].append((ant_x, ant_y, angle_to_ant))
-                        density_areas[segment_name][fiting_view_range_idx]['ants'] += 1
+                        detected_ants[segment_idx].append((ant_x, ant_y, angle_to_ant))
+                        density_areas[segment_idx][fitting_view_range_idx]['ants'] += 1
                         break
 
         return detected_ants, density_areas
@@ -741,9 +711,8 @@ class Ant():
 
         # Include composite scores for each vision segment
         # Ensure that the segments are ordered consistently
-        for idx, (angle_range, _) in enumerate(vision_segments):
-            segment_name = self._get_segment_name(idx)
-            composite_score = self.composite_scores.get(segment_name, 0.0)
+        for segment_idx, (angle_range, _, _) in enumerate(vision_segments):
+            composite_score = self.composite_scores.get(segment_idx, 0.0)
             result.append(composite_score)
 
         return result
@@ -1179,11 +1148,8 @@ class AntDynamicsEnv(gym.Env):
                 MAX_VISION_RANGE
             )
 
-            segment_names = ('forward_l1', 'forward_l2', 'forward', 'forward_r2', 'forward_r1')
             font = pygame.font.SysFont('Arial', 9)
-
-            for i in range(len(vision_segments)):
-                (angle_range_start, angle_range_end), colour = vision_segments[i]
+            for segment_idx, ((angle_range_start, angle_range_end), colour, _) in enumerate(vision_segments):
                 # Calculate start and stop angles, normalized to 0 to 2*pi
                 start_angle = (self.ant.theta + angle_range_start) % (2 * math.pi)
                 stop_angle = (self.ant.theta + angle_range_end) % (2 * math.pi)
@@ -1210,17 +1176,17 @@ class AntDynamicsEnv(gym.Env):
                     )
                 )
 
-                for j in range(len(view_ranges)):
-                    view_range = view_ranges[j]
-
-                    # display number of entities in each density area in the center of the area
-                    draw_distance =  view_range / 2 if j <= 0 else view_ranges[j - 1] + (view_range - view_ranges[j - 1]) / 2
+                for vision_idx, view_range in enumerate(view_ranges):
+                    # compute distance to the center of each area
+                    draw_distance =  view_range / 2 if vision_idx <= 0 \
+                        else view_ranges[vision_idx - 1] + (view_range - view_ranges[vision_idx - 1]) / 2
+                    # display number of entities in each density area
                     self._draw_text(
                         canvas,
                         font,
                         int(self.ant.pos.x + np.cos(central_angle) * draw_distance),
                         int(self.ant.pos.y + np.sin(central_angle) * draw_distance),
-                        f"{self.ant.density_areas[segment_names[i]][j]['ants']}",
+                        f"{self.ant.density_areas[segment_idx][vision_idx]['ants']}",
                         (0, 0, 0)
                     )
 
@@ -1236,11 +1202,9 @@ class AntDynamicsEnv(gym.Env):
                     )
 
         # Draw wall distance indicators
-        # for segment, distance in self.ant.wall_distances.items():
+        # for segment_idx, distance in self.ant.wall_distances.items():
         #     if distance is not None:
         #         # Calculate the central angle of the segment
-        #         segment_idx = ['forward_l1', 'forward_l2', 'forward', 'forward_r2',
-        #                     'forward_r1', 'backward_r', 'backward', 'backward_l'].index(segment)
         #         angle_range, _ = vision_segments[segment_idx]
         #         central_angle = (angle_range[0] + angle_range[1]) / 2
         #         central_angle = (self.ant.theta + central_angle) % (2 * math.pi)
@@ -1259,15 +1223,11 @@ class AntDynamicsEnv(gym.Env):
         #         )
 
         # Draw nearest ant distance indicators
-        for segment, distance_info in self.ant.nearest_ant_distances.items():
+        for segment_idx, distance_info in self.ant.nearest_ant_distances.items():
             distance, angle = distance_info
             if distance is not None and distance != 0.0:
                 # Calculate the central angle of the segment
-                segment_idx = ['forward_l1', 'forward_l2', 'forward', 'forward_r2','forward_r1'].index(segment)
-                angle_range, segment_color = vision_segments[segment_idx]
-                # TODO: remove central angle calculation
-                # central_angle = (angle_range[0] + angle_range[1]) / 2
-                # central_angle = (self.ant.theta + central_angle) % (2 * math.pi)
+                angle_range, segment_color, _ = vision_segments[segment_idx]
 
                 # Calculate end point based on nearest ant distance
                 end_x = int(self.ant.pos.x + math.cos(angle) * (1 - distance) * MAX_VISION_RANGE)
