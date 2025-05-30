@@ -9,6 +9,8 @@ from typing import Dict, Any
 import gymnasium as gym
 from gymnasium import spaces
 from gymnasium.utils import colorize, seeding
+from pettingzoo import ParallelEnv
+from pettingzoo.utils import parallel_to_aec, wrappers
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -83,82 +85,6 @@ FADE_DURATION = 5  # seconds
 ##########################################
 #          Assistance functions          #
 ##########################################
-
-
-def translate_data_to_sim_space(data, arena_dim):
-    data_len = len(data)
-    logger.info(msg=f"Ant trail data loaded. Total records: {data_len}")
-    arena_bb = find_bounding_box(data)
-    origin_arena = calculate_circle(*arena_bb)
-
-    translation, scale = circle_transformation(origin_arena, arena_dim)
-
-    logger.info(msg=f"Processing data now. This will take a while...")
-    apply_transform_scale(data, translation, scale)
-    logger.info(msg=f"Finished processing.")
-
-    logger.info(msg=f"Translation: {translation}, scale: {scale}")
-    logger.info(
-        msg=f"Original: ({origin_arena[0][0] + translation[0]}, {origin_arena[0][1] + translation[1]}), scale: {origin_arena[1] * scale}")
-    logger.info(msg=f"Simulated: {arena_dim[0]}, scale: {arena_dim[1]}")
-
-    return data
-
-
-def load_analysis_results(results_dir: str = 'results/state_space') -> Dict[str, Any]:
-    """
-    Load the saved analysis results from the specified directory.
-
-    Args:
-        results_dir: Directory containing the analysis output files
-
-    Returns:
-        Dictionary containing all analysis results:
-            - state_vectors: Raw state vectors
-            - reduced_states: PCA-reduced state representations
-            - transition_probabilities: State transition matrix
-            - common_paths: Common behavioral sequences
-            - behavioral_motifs: Identified behavioral patterns
-
-    Raises:
-        FileNotFoundError: If any of the required files are missing
-    """
-    results_path = Path(results_dir)
-
-    try:
-        # Load each component
-        state_vectors = np.load(results_path / 'state_vectors.npy')
-        reduced_states = np.load(results_path / 'reduced_states.npy')
-        transition_probabilities = np.load(results_path / 'transition_probabilities.npy')
-        common_paths = np.load(results_path / 'common_paths.npy', allow_pickle=True)
-        behavioral_motifs = np.load(results_path / 'behavioral_motifs.npy', allow_pickle=True)
-
-        # Package results
-        results = {
-            'state_vectors': state_vectors,
-            'reduced_states': reduced_states,
-            'transition_probabilities': transition_probabilities,
-            'common_paths': common_paths,
-            'behavioral_motifs': behavioral_motifs
-        }
-
-        # Print summary of loaded data
-        print("\nLoaded analysis results:")
-        print(f"State vectors shape: {state_vectors.shape}")
-        print(f"Reduced states shape: {reduced_states.shape}")
-        print(f"Transition matrix shape: {transition_probabilities.shape}")
-        print(f"Number of common paths: {len(common_paths)}")
-        print(f"Number of behavioral motifs: {len(behavioral_motifs)}")
-
-        return results
-
-    except FileNotFoundError as e:
-        print(f"Error: Could not find required analysis files in {results_dir}")
-        print(f"Make sure you have run the analysis code first: {e}")
-        raise
-    except Exception as e:
-        print(f"Error loading analysis results: {e}")
-        raise
 
 def find_bounding_box(data):
     # Separate all x and y values into slices
@@ -734,7 +660,7 @@ class Ant():
         self._move()
 
 
-class AntDynamicsEnv(gym.Env):
+class AntColonyEnv(gym.Env):
     metadata = {
         'name': 'ant-colony-v0',
         'render_modes': ['human', 'rgb_array'],
@@ -1326,7 +1252,7 @@ class AntDynamicsEnv(gym.Env):
 
 
 if __name__ == "__main__":
-    env = AntDynamicsEnv(render_mode='human')
+    env = AntColonyEnv(render_mode='human')
 
     total_reward = 0
     obs, info = env.reset()

@@ -183,5 +183,5 @@ fabric.properties
 
 # idea folder, uncomment if you don't need it
 .idea
-/domain/ant_dynamics.py
-/domain/aquarium.py
+/ant_colony_arena/ant_dynamics.py
+/ant_colony_arena/aquarium.py

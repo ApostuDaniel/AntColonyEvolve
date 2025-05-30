@@ -8,6 +8,7 @@ dependencies: # The list of packages to include in your environment
     - python-graphviz
     - gymnasium-classic_control
     - box2d-py
+    - pettingzoo
     - pip # Install pip in your environment
     - pip: # Include pip dependencies last
         - neat-python
