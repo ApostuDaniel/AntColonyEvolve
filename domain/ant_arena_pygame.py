@@ -30,14 +30,18 @@ arena_sizes = namedtuple('arena_sizes', ['arena_center', 'arena_radius'])
 # Global parameters for agent control
 TIMESTEP = 1. / SIM_FPS  # Not sure if this will be necessary, given the fixed FPS?
 # TIME_LIMIT = SIM_FPS * 60   # 60 seconds
-TIME_LIMIT = SIM_FPS * 30  # 60 seconds
+TIME_LIMIT = SIM_FPS * 30  # 30 seconds
 
 ANT_DIM = vec2d(5, 5)
 AGENT_SPEED = 120.00  # Maximum ant speed observed in data (pixels)
 TURN_RATE = 0.3575  # Maximum turning rate observed in data (radians)
+
 MAX_VISION_RANGE = 60
 MIDDLE_VISION_RANGE = 40
 MIN_VISION_RANGE = 20
+
+MAX_FOOD_QUANTITY = 50
+FOOD_SIZE_SCALING = 0.5
 
 
 DRAW_ANT_VISION = True
@@ -339,7 +343,7 @@ class Ant():
         # Initialize distance attributes for each vision segment
         self.composite_scores = {}
         self.wall_distances = {}
-        self.nearest_ant_distances = {}
+        self.nearest_food_distances = {}
         # areas delimited by vision segments and vision ranges (portion of a pie slice)
         self.density_areas = {}
 
@@ -448,7 +452,7 @@ class Ant():
 
     #         self.nearest_ant_distances[segment_name] = ant_distance
 
-    def _detect_distances(self, detected_ants):
+    def _detect_distances(self, detected_food):
         """
         Detect distances to walls and ants, and compute a hierarchical composite score for each segment.
         Returns distances as positive values for ants and negative values for walls, prioritizing the closest object.
@@ -459,7 +463,7 @@ class Ant():
 
             # Initialize scaled distances
             wall_distance_scaled = 0.0
-            ant_distance_scaled = (0.0,0)
+            food_distance_scaled = (0.0,0)
 
             # Get wall distance
             # compute_distance_to_wall already returns the distance scaled
@@ -469,24 +473,24 @@ class Ant():
             wall_distance_scaled = 1.0 - raw_wall_distance
 
             # Get ant distance
-            ants_in_segment = detected_ants.get(idx, [])
-            if ants_in_segment:
+            food_in_segment = detected_food.get(idx, [])
+            if food_in_segment:
                 # Use generator expression instead of list comprehension for efficiency
-                raw_ant_distance = min(
-                    ((math.hypot(ant[0] - self.pos.x, ant[1] - self.pos.y), ant[2])
-                     for ant in ants_in_segment),
+                raw_food_distance = min(
+                    ((math.hypot(food[0] - self.pos.x, food[1] - self.pos.y), food[2])
+                     for food in food_in_segment),
                     key=lambda x: x[0],
                     default=None
                 )
 
-                if raw_ant_distance is not None and raw_ant_distance[0] <= self.vision_range:
-                    ant_distance_scaled = 1.0 - (raw_ant_distance[0] / self.vision_range), raw_ant_distance[1]
+                if raw_food_distance is not None and raw_food_distance[0] <= self.vision_range:
+                    food_distance_scaled = 1.0 - (raw_food_distance[0] / self.vision_range), raw_food_distance[1]
 
             # TODO: remove composite scores
             # Determine composite score based on closest object
-            if ant_distance_scaled[0] > 0 and (wall_distance_scaled == 0 or
-                                            raw_ant_distance[0] < raw_wall_distance):
-                composite_score = ant_distance_scaled[0]  # Positive for ants
+            if food_distance_scaled[0] > 0 and (wall_distance_scaled == 0 or
+                                            raw_food_distance[0] < raw_wall_distance):
+                composite_score = food_distance_scaled[0]  # Positive for ants
             elif wall_distance_scaled > 0:
                 composite_score = -wall_distance_scaled  # Negative for walls
             else:
@@ -495,16 +499,16 @@ class Ant():
             # Store all scores at once
             self.composite_scores[idx] = composite_score
             self.wall_distances[idx] = wall_distance_scaled
-            self.nearest_ant_distances[idx] = ant_distance_scaled
+            self.nearest_food_distances[idx] = food_distance_scaled
 
-    def _detect_vision(self, detected_ants: dict, total_colony_size: int, max_value: float = 1.0):
+    def _detect_vision(self, detected_food: dict, total_colony_size: int, max_value: float = 1.0):
         """
-        Scales the number of detected ants in each vision segment using an exponential function,
+        Scales the number of detected food in each vision segment using an exponential function,
         ensuring that the scaled value reaches approximately max_value when 20% of the colony is detected
         in a single segment.
 
         Parameters:
-        - detected_ants (dict):
+        - detected_food (dict):
             A dictionary mapping segment names to lists of detected ants.
 
         - total_colony_size (int):
@@ -522,7 +526,7 @@ class Ant():
         # Constant k to ensure the scaled value reaches ~99% of max_value at adjusted_fraction = 1
         k = 4.60517  # k = -ln(0.01)
 
-        vision_counts = [len(detected_ants[i]) for i in range(len(vision_segments))]
+        vision_counts = [len(detected_food[i]) for i in range(len(vision_segments))]
 
         scaled_vision = []
         for ants_detected in vision_counts:
@@ -548,24 +552,24 @@ class Ant():
                 return i
         return None
 
-    def _detect_nearby_ants(self, other_ants):
+    def _detect_nearby_food(self, food_sources):
         """
-        Detects other ants within vision range and categorizes them into vision segments.
+        Detects food sources within vision range and categorizes them into vision segments.
 
         Parameters:
-        - other_ants (list of tuples): The (x, y) positions of other ants.
+        - food_sources (list of tuples): The (x, y, quantity) positions of food sources and their quantity.
 
         Returns:
-        - dict: Maps segment names to lists of ant positions within that segment.
+        - dict: Maps segment names to lists of food positions within that segment.
         """
         # Pre-calculate common values
         vision_range_squared = self.vision_range ** 2
         view_ranges_squared = [view_range ** 2 for view_range in view_ranges]
 
-        # Initialize detected_ants with empty lists using dict comprehension
-        detected_ants = {segment_idx: [] for segment_idx in range(len(vision_segments))}
+        # Initialize detected_food with empty lists using dict comprehension
+        detected_food = {segment_idx: [] for segment_idx in range(len(vision_segments))}
         # Initialize density_areas to count number of ants in area
-        density_areas = {segment_idx: [{'ants': 0} for _ in range(len(view_ranges))]
+        density_areas = {segment_idx: [{'food': 0} for _ in range(len(view_ranges))]
                          for segment_idx in range(len(vision_segments))}
 
         # Pre-calculate segment boundaries once
@@ -575,36 +579,34 @@ class Ant():
             stop = (self.theta + angle_range[1]) % (2 * math.pi)
             segment_boundaries.append((start, stop, idx))
 
-        # Process each ant
+        # Process each food
         pos_x, pos_y = self.pos.x, self.pos.y
-        for ant_x, ant_y in other_ants:
+        for food_x, food_y, quantity in food_sources:
             # Use faster distance calculation without sqrt for initial check
-            dx = ant_x - pos_x
-            dy = ant_y - pos_y
+            dx = food_x - pos_x
+            dy = food_y - pos_y
             distance_squared = dx * dx + dy * dy
             fitting_view_range_idx = self._get_fitting_vision_range_index(distance_squared, view_ranges_squared)
 
             if distance_squared <= vision_range_squared:
                 # Only calculate angle for ants within range
-                angle_to_ant = math.atan2(dy, dx) % (2 * math.pi)
+                angle_to_food = math.atan2(dy, dx) % (2 * math.pi)
 
                 # Find matching segment
                 for start_angle, stop_angle, segment_idx in segment_boundaries:
                     if start_angle < stop_angle:
-                        if start_angle <= angle_to_ant <= stop_angle:
-                            detected_ants[segment_idx].append((ant_x, ant_y, angle_to_ant))
-                            density_areas[segment_idx][fitting_view_range_idx]['ants'] += 1
+                        if start_angle <= angle_to_food <= stop_angle:
+                            detected_food[segment_idx].append((food_x, food_y, angle_to_food))
+                            density_areas[segment_idx][fitting_view_range_idx]['food'] += quantity
                             break
-                    elif angle_to_ant >= start_angle or angle_to_ant <= stop_angle:
+                    elif angle_to_food >= start_angle or angle_to_food <= stop_angle:
                         # Angle wraps around 2π boundary
-                        detected_ants[segment_idx].append((ant_x, ant_y, angle_to_ant))
-                        density_areas[segment_idx][fitting_view_range_idx]['ants'] += 1
+                        detected_food[segment_idx].append((food_x, food_y, angle_to_food))
+                        density_areas[segment_idx][fitting_view_range_idx]['food'] += quantity
                         break
 
-        return detected_ants, density_areas
+        return detected_food, density_areas
 
-    def set_pheromone(self, pheromone):
-        self.pheromone = pheromone
 
     def get_polar_position(self):
         """
@@ -687,10 +689,10 @@ class Ant():
                 vision segment data, and pheromone levels.
         """
         if others is not None:
-            detected_ants, density_areas = self._detect_nearby_ants(others)
+            detected_food, density_areas = self._detect_nearby_food(others)
             self.density_areas = density_areas
-            self._detect_vision(detected_ants, len(others))
-            self._detect_distances(detected_ants)
+            self._detect_vision(detected_food, len(others))
+            self._detect_distances(detected_food)
 
         # Get the agent's position in polar coordinates
         r_norm, theta_norm = self.get_polar_position()
@@ -750,7 +752,7 @@ class AntDynamicsEnv(gym.Env):
             'action': []
         }
 
-        self.other_ants = None
+        self.food_sources = None
         self.viewer = None
         self.state = None
         self.noise = 0
@@ -914,11 +916,7 @@ class AntDynamicsEnv(gym.Env):
     def _destroy(self):
         self.ant = None
         self.ant_trail = []
-        self.target_trail = []
-        self.target_data = None
-        self.target_angles = []
-        self.target_distances = []
-        self.other_ants = []
+        self.food_sources = []
         self.other_ants_angles = []
 
         self.viewer = None
@@ -947,19 +945,21 @@ class AntDynamicsEnv(gym.Env):
 
         self.ant = Ant(self.ant_arena.arena_center)
 
-        self.other_ants = []
+        self.food_sources = []
         rng = np.random.default_rng()
         for _ in range(20):
-            x, y = rng.uniform(-self.ant_arena.arena_radius * 0.85, self.ant_arena.arena_radius * 0.85, size=2)
-            self.other_ants.append((self.ant_arena.arena_center.x + x, self.ant_arena.arena_center.y + y))
+            max_draw_radius = self.ant_arena.arena_radius * 0.85 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING) / 2
+            x, y = rng.uniform(-max_draw_radius, max_draw_radius, size=2)
+            quantity = int(rng.uniform(10, MAX_FOOD_QUANTITY))
+            self.food_sources.append((self.ant_arena.arena_center.x + int(x), self.ant_arena.arena_center.y + int(y), quantity))
 
-        if self.other_ants is not None:
-            obs = self.get_observations(self.other_ants)
+        if self.food_sources is not None:
+            obs = self.get_observations(self.food_sources)
         else:
             obs = self.get_observations()
         info = {
             'wall_distances': self.ant.wall_distances,
-            'nearest_ant_distances': self.ant.nearest_ant_distances,
+            'nearest_ant_distances': self.ant.nearest_food_distances,
         }
 
         if self.render_mode == 'human':
@@ -1079,8 +1079,8 @@ class AntDynamicsEnv(gym.Env):
         self.ant.update()
 
         # Get observations of other ants in the arena
-        if self.other_ants is not None:
-            obs = self.get_observations(self.other_ants)
+        if self.food_sources is not None:
+            obs = self.get_observations(self.food_sources)
         else:
             obs = self.get_observations()
         self._track_trail(self.ant.pos)
@@ -1097,7 +1097,7 @@ class AntDynamicsEnv(gym.Env):
         # Additional information (if necessary)
         info = {
             'wall_distances': self.ant.wall_distances,
-            'nearest_ant_distances': self.ant.nearest_ant_distances,
+            'nearest_ant_distances': self.ant.nearest_food_distances,
         }
 
         return obs, reward, False, truncated, info
@@ -1140,13 +1140,62 @@ class AntDynamicsEnv(gym.Env):
             int(self.ant_arena.arena_radius)  # Radius
         )
 
-        if DRAW_ANT_VISION:
-            pygame.draw.circle(
+        ### DRAW TRAILS FIRST
+
+        # Draw ant trail
+        trail_length = len(self.ant_trail)
+        if TRACK_TRAIL == 'all':
+            self.ant_trail_segment = self.ant_trail
+        elif TRACK_TRAIL == 'fade':
+            if trail_length > FADE_DURATION * SIM_FPS:
+                self.ant_trail_segment = self.ant_trail[trail_length - FADE_DURATION * SIM_FPS:]
+        else:
+            self.ant_trail_segment = []
+        for pos in self.ant_trail_segment:
+            pygame.draw.rect(
                 canvas,
-                (225, 225, 230, 255),
-                (int(self.ant.pos.x), int(self.ant.pos.y)),
-                MAX_VISION_RANGE
+                (180, 180, 220),
+                (
+                    pos.x - ANT_DIM.x / 2.,
+                    pos.y - ANT_DIM.y / 2.,
+                    ANT_DIM.x,
+                    ANT_DIM.y
+                )
             )
+
+        ### THEN DRAW FOOD SOURCES AT THEIR CURRENT POSITIONS
+
+        # Draw food positions and size
+        if self.food_sources is not None:
+            try:
+                for food_source in self.food_sources:
+                    # food size half as big as quantity
+                    food_size = int(max(2, food_source[2] * FOOD_SIZE_SCALING))
+                    pygame.draw.rect(
+                        canvas,
+                        (180, 180, 180),
+                        (
+                            food_source[0] - food_size / 2.,
+                            food_source[1] - food_size / 2.,
+                            food_size,
+                            food_size
+                        )
+                    )
+
+            except IndexError:
+                print(food_source)
+                logger.error("End of time series reached for other ants.")
+            except TypeError:
+                print(food_source)
+                logger.error("Cannot draw ant with provided coordinates.")
+
+        if DRAW_ANT_VISION:
+            # pygame.draw.circle(
+            #     canvas,
+            #     (225, 225, 230, 255),
+            #     (int(self.ant.pos.x), int(self.ant.pos.y)),
+            #     MAX_VISION_RANGE
+            # )
 
             font = pygame.font.SysFont('Arial', 9)
             for segment_idx, ((angle_range_start, angle_range_end), colour, _) in enumerate(vision_segments):
@@ -1186,7 +1235,7 @@ class AntDynamicsEnv(gym.Env):
                         font,
                         int(self.ant.pos.x + np.cos(central_angle) * draw_distance),
                         int(self.ant.pos.y + np.sin(central_angle) * draw_distance),
-                        f"{self.ant.density_areas[segment_idx][vision_idx]['ants']}",
+                        f"{self.ant.density_areas[segment_idx][vision_idx]['food']}",
                         (0, 0, 0)
                     )
 
@@ -1223,7 +1272,7 @@ class AntDynamicsEnv(gym.Env):
         #         )
 
         # Draw nearest ant distance indicators
-        for segment_idx, distance_info in self.ant.nearest_ant_distances.items():
+        for segment_idx, distance_info in self.ant.nearest_food_distances.items():
             distance, angle = distance_info
             if distance is not None and distance != 0.0:
                 # Calculate the central angle of the segment
@@ -1241,53 +1290,6 @@ class AntDynamicsEnv(gym.Env):
                     (end_x, end_y),
                     1
                 )
-
-        ### DRAW TRAILS FIRST
-
-        # Draw ant trail
-        trail_length = len(self.ant_trail)
-        if TRACK_TRAIL == 'all':
-            self.ant_trail_segment = self.ant_trail
-        elif TRACK_TRAIL == 'fade':
-            if trail_length > FADE_DURATION * SIM_FPS:
-                self.ant_trail_segment = self.ant_trail[trail_length - FADE_DURATION * SIM_FPS:]
-        else:
-            self.ant_trail_segment = []
-        for pos in self.ant_trail_segment:
-            pygame.draw.rect(
-                canvas,
-                (180, 180, 220),
-                (
-                    pos.x - ANT_DIM.x / 2.,
-                    pos.y - ANT_DIM.y / 2.,
-                    ANT_DIM.x,
-                    ANT_DIM.y
-                )
-            )
-
-        ### THEN DRAW ANTS AT THEIR CURRENT POSITIONS
-
-        # Draw other ants' positions
-        if self.other_ants is not None:
-            try:
-                for other_ant in self.other_ants:
-                    pygame.draw.rect(
-                        canvas,
-                        (180, 180, 180),
-                        (
-                            other_ant[0] - ANT_DIM.x / 2.,
-                            other_ant[1] - ANT_DIM.y / 2.,
-                            ANT_DIM.x,
-                            ANT_DIM.y
-                        )
-                    )
-
-            except IndexError:
-                print(other_ant)
-                logger.error("End of time series reached for other ants.")
-            except TypeError:
-                print(other_ant)
-                logger.error("Cannot draw ant with provided coordinates.")
 
         # Draw agent last; to ensure visibility.
         pygame.draw.rect(
