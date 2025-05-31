@@ -874,7 +874,7 @@ class AntColonyEnv(gym.Env):
         self.food_sources = []
         rng = np.random.default_rng()
         for _ in range(20):
-            max_draw_radius = self.ant_arena.arena_radius * 0.85 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING) / 2
+            max_draw_radius = self.ant_arena.arena_radius * 0.85 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING)
             x, y = rng.uniform(-max_draw_radius, max_draw_radius, size=2)
             quantity = int(rng.uniform(10, MAX_FOOD_QUANTITY))
             self.food_sources.append((self.ant_arena.arena_center.x + int(x), self.ant_arena.arena_center.y + int(y), quantity))
