@@ -4,10 +4,7 @@ import sys, math
 from collections import namedtuple
 import numpy as np
 import pygame
-from pathlib import Path
-from typing import Dict, Any
 
-import gymnasium as gym
 from gymnasium import spaces
 from gymnasium.utils import colorize, seeding
 from pettingzoo import ParallelEnv
@@ -699,8 +696,8 @@ class AntColonyEnv(ParallelEnv):
         self.window = None
         self.clock = None
 
-        arena_center = SCREEN_W / 2.0, SCREEN_H / 2.0
-        arena_radius = min(SCREEN_W, SCREEN_H) / 2.0 - min(SCREEN_W, SCREEN_H) * BOUNDARY_SCALE
+        arena_center = (int(SCREEN_W / 2.0), int(SCREEN_H / 2.0))
+        arena_radius = int(min(SCREEN_W, SCREEN_H) / 2.0 - min(SCREEN_W, SCREEN_H) * BOUNDARY_SCALE)
 
         # circular arena
         self.ant_arena = arena_sizes( vec2d(arena_center[0], arena_center[1]), arena_radius)
@@ -869,11 +866,16 @@ class AntColonyEnv(ParallelEnv):
         self.agents = copy.deepcopy(self.possible_agents)
 
         self.ants = {}
+
         rng = np.random.default_rng()
-        max_ant_draw_radius = self.ant_arena.arena_radius * 0.80 - ANT_DIM.y * 2
+        max_ant_draw_radius = self.ant_arena.arena_radius * 0.80 - ANT_DIM.x * 2
         for agent in self.agents:
-            x, y = rng.uniform(-max_ant_draw_radius, max_ant_draw_radius, size=2)
-            self.ants[agent] = Ant(vec2d(int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y)))
+            while True:
+                x, y = rng.uniform(-max_ant_draw_radius, max_ant_draw_radius, size=2)
+                x, y = (int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y))
+                if is_rectangle_in_circle(x, y, self.ant_arena.arena_center, self.ant_arena.arena_radius):
+                    self.ants[agent] = Ant((x, y))
+                    break
 
         self.food_sources = []
         max_food_draw_radius = self.ant_arena.arena_radius * 0.80 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING) * 2
