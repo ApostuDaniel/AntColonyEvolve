@@ -1,3 +1,4 @@
+import copy
 import logging
 import sys, math
 from collections import namedtuple
@@ -667,12 +668,14 @@ class AntColonyEnv(ParallelEnv):
         'render_fps': SIM_FPS
     }
 
-    def __init__(self, nr_of_ants=20, render_mode=None):
+    def __init__(self, nr_of_ants=10, nr_of_food=20, render_mode=None):
         self.np_random, seed = self.seed(seed=69)
 
         self.ant = None
-        self.ants = {}
+        self.ants = None
         self.possible_agents = [f"ant_{i}" for i in range(nr_of_ants)]
+        self.nr_of_ants = nr_of_ants
+        self.nr_of_food = nr_of_food
 
         # self.target_data = {
         #     'angle': [],
@@ -829,13 +832,14 @@ class AntColonyEnv(ParallelEnv):
             return -69
 
     def get_observations(self, others=None):
-        return self.ant.get_obs(others)
+        return {a: self.ants[a].get_obs(others) for a in self.agents}
 
     def _track_trail(self, pos: vec2d):
         self.ant_trail.append(pos)
 
     def _destroy(self):
         self.ant = None
+        self.ants = {}
         self.ant_trail = []
         self.food_sources = []
         self.other_ants_angles = []
@@ -846,47 +850,56 @@ class AntColonyEnv(ParallelEnv):
         self.window = None
         self.clock = None
 
-    def reset(self):
+    def reset(self, seed=None, options=None):
         self._destroy()
 
         self.t = 0  # timestep reset
 
-        self.arena_mask = np.zeros((50, 50), dtype=bool)
-
-        # Create arena mask for valid cells
-        center_x = 25  # Center of 50x50 grid
-        center_y = 25
-        y, x = np.ogrid[-center_y:50 - center_y, -center_x:50 - center_x]
-        mask_radius = (min(50, 50) / 2) * 0.98  # Slightly smaller than arena
-        self.arena_mask = x * x + y * y <= mask_radius * mask_radius
+        # self.arena_mask = np.zeros((50, 50), dtype=bool)
+        #
+        # # Create arena mask for valid cells
+        # center_x = 25  # Center of 50x50 grid
+        # center_y = 25
+        # y, x = np.ogrid[-center_y:50 - center_y, -center_x:50 - center_x]
+        # mask_radius = (min(50, 50) / 2) * 0.98  # Slightly smaller than arena
+        # self.arena_mask = x * x + y * y <= mask_radius * mask_radius
 
         self.actions = []
 
         self.time_offset = 0.0
 
+        self.agents = copy.deepcopy(self.possible_agents)
+
         self.ant = Ant(self.ant_arena.arena_center)
 
-        self.food_sources = []
+        self.ants = {}
         rng = np.random.default_rng()
-        for _ in range(20):
-            max_draw_radius = self.ant_arena.arena_radius * 0.85 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING) * 2
-            x, y = rng.uniform(-max_draw_radius, max_draw_radius, size=2)
+        max_ant_draw_radius = self.ant_arena.arena_radius * 0.80 - ANT_DIM.y * 2
+        for agent in self.agents:
+            x, y = rng.uniform(-max_ant_draw_radius, max_ant_draw_radius, size=2)
+            self.ants[agent] = Ant(vec2d(int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y)))
+
+        self.food_sources = []
+        max_food_draw_radius = self.ant_arena.arena_radius * 0.80 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING) * 2
+        for _ in range(self.nr_of_food):
+            x, y = rng.uniform(-max_food_draw_radius, max_food_draw_radius, size=2)
             quantity = int(rng.uniform(10, MAX_FOOD_QUANTITY))
-            self.food_sources.append((self.ant_arena.arena_center.x + int(x), self.ant_arena.arena_center.y + int(y), quantity))
+            self.food_sources.append((int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y), quantity))
 
         if self.food_sources is not None:
-            obs = self.get_observations(self.food_sources)
+            observations = self.get_observations(self.food_sources)
         else:
-            obs = self.get_observations()
-        info = {
-            'wall_distances': self.ant.wall_distances,
-            'nearest_ant_distances': self.ant.nearest_food_distances,
-        }
+            observations = self.get_observations()
+
+        infos = {a: {
+            'wall_distances': self.ants[a].wall_distances,
+            'nearest_ant_distances': self.ants[a].nearest_food_distances,
+        } for a in self.agents}
 
         if self.render_mode == 'human':
-            self._render_frame()
+            self._render_frame
 
-        return obs, info
+        return observations, infos
 
     def close(self):
         if self.window is not None:
@@ -976,52 +989,53 @@ class AntColonyEnv(ParallelEnv):
     #
     #     return action, target_data
 
-    def step(self, action):
+    def step(self, actions):
         """
-        Each step, take the given action and return observations, reward, done (bool)
+        Each step, take the given actions and return observations, rewards, terminations, truncations
         and any other additional information if necessary.
         """
-        truncated = False
-        self.t += 1
 
         # Pygame controls and resources if render_mode == 'human'
         if self.render_mode == "human":
-            self._render_frame()
-
-        # Implement target_data actions using auto_action controls
-        auto_action = action # [FORWARD, BACKWARD, TURN_LEFT, TURN_RIGHT]
+            self._render_frame
 
         # Update the ant position and orientation with the calculated distance and rotation
         # auto_action, movement_info = self._get_stepped_action(2)
         # print(movement_info['distance'], movement_info['angle'])
 
-        self.ant.set_action(auto_action, AGENT_SPEED/15, 1)
-        # self.ant.set_action(auto_action, movement_info['distance'], self.target_angles[self.t][1])
-        self.ant.update()
+        for agent, action in actions.items():
+            self.ants[agent].set_action(action, AGENT_SPEED/15, 1)
+            # self.ant.set_action(auto_action, movement_info['distance'], self.target_angles[self.t][1])
+            self.ants[agent].update()
 
+        self.t += 1
         # Get observations of other ants in the arena
         if self.food_sources is not None:
-            obs = self.get_observations(self.food_sources)
+            observations = self.get_observations(self.food_sources)
         else:
-            obs = self.get_observations()
-        self._track_trail(self.ant.pos)
+            observations = self.get_observations()
 
+        first_ant = list(self.ants.keys())[0]
+        self._track_trail(self.ants[first_ant].pos)
+
+        terminations = {a: False for a in self.agents}
 
         # Determine if the episode is done
         if self.t >= self.t_limit:
-            truncated = True
+            truncations = {a: True for a in self.agents}
+        else:
+            truncations = {a: False for a in self.agents}
 
         # Initialize reward value
-        reward = 0
-        reward = self._reward_function(auto_action)
+        rewards = {agent: self._reward_function(action) for agent, action in actions.items()}
 
         # Additional information (if necessary)
-        info = {
-            'wall_distances': self.ant.wall_distances,
-            'nearest_ant_distances': self.ant.nearest_food_distances,
-        }
+        infos = {a: {
+            'wall_distances': self.ants[a].wall_distances,
+            'nearest_ant_distances': self.ants[a].nearest_food_distances,
+        } for a in self.agents}
 
-        return obs, reward, False, truncated, info
+        return observations, rewards, terminations, truncations, infos
 
     @staticmethod
     def _draw_text(canvas: pygame.Surface, font: pygame.font, x: int, y: int, text: str, color: tuple[int, int, int]):
@@ -1034,8 +1048,9 @@ class AntColonyEnv(ParallelEnv):
         if mode is not None:
             self.render_mode = mode
         # if self.render_mode == 'rgb_array':
-        return self._render_frame()
+        return self._render_frame
 
+    @property
     def _render_frame(self):
         if self.window is None and self.render_mode == 'human':
             pygame.init()
@@ -1090,7 +1105,7 @@ class AntColonyEnv(ParallelEnv):
         if self.food_sources is not None:
             try:
                 for food_source in self.food_sources:
-                    # food size half as big as quantity
+                    # scale down the food size
                     food_size = int(max(2, food_source[2] * FOOD_SIZE_SCALING))
                     pygame.draw.rect(
                         canvas,
@@ -1120,56 +1135,58 @@ class AntColonyEnv(ParallelEnv):
 
             font = pygame.font.SysFont('Arial', 9)
             for segment_idx, ((angle_range_start, angle_range_end), colour, _) in enumerate(vision_segments):
-                # Calculate start and stop angles, normalized to 0 to 2*pi
-                start_angle = (self.ant.theta + angle_range_start) % (2 * math.pi)
-                stop_angle = (self.ant.theta + angle_range_end) % (2 * math.pi)
-                central_angle = (self.ant.theta + (angle_range_start + angle_range_end) / 2) % (2 * math.pi)
+                for agent in self.agents:
+                    ant = self.ants[agent]
+                    # Calculate start and stop angles, normalized to 0 to 2*pi
+                    start_angle = (ant.theta + angle_range_start) % (2 * math.pi)
+                    stop_angle = (ant.theta + angle_range_end) % (2 * math.pi)
+                    central_angle = (ant.theta + (angle_range_start + angle_range_end) / 2) % (2 * math.pi)
 
-                # Draw lines delimiting the vision segments
-                pygame.draw.line(
-                    canvas,
-                    colour,
-                    (int(self.ant.pos.x), int(self.ant.pos.y)),
-                    (
-                        int(self.ant.pos.x + np.cos(start_angle) * MAX_VISION_RANGE),
-                        int(self.ant.pos.y + np.sin(start_angle) * MAX_VISION_RANGE)
-                    )
-                )
-
-                pygame.draw.line(
-                    canvas,
-                    colour,
-                    (int(self.ant.pos.x), int(self.ant.pos.y)),
-                    (
-                        int(self.ant.pos.x + np.cos(stop_angle) * MAX_VISION_RANGE),
-                        int(self.ant.pos.y + np.sin(stop_angle) * MAX_VISION_RANGE)
-                    )
-                )
-
-                for vision_idx, view_range in enumerate(view_ranges):
-                    # compute distance to the center of each area
-                    draw_distance =  view_range / 2 if vision_idx <= 0 \
-                        else view_ranges[vision_idx - 1] + (view_range - view_ranges[vision_idx - 1]) / 2
-                    # display number of entities in each density area
-                    self._draw_text(
-                        canvas,
-                        font,
-                        int(self.ant.pos.x + np.cos(central_angle) * draw_distance),
-                        int(self.ant.pos.y + np.sin(central_angle) * draw_distance),
-                        f"{self.ant.density_areas[segment_idx][vision_idx]['food']}",
-                        (0, 0, 0)
-                    )
-
-                    # Draw arcs delimiting the vision ranges and density areas
-                    pygame.draw.arc(
+                    # Draw lines delimiting the vision segments
+                    pygame.draw.line(
                         canvas,
                         colour,
-                        (int(self.ant.pos.x - view_range), int(self.ant.pos.y - view_range), view_range * 2,
-                         view_range * 2),
-                # To align to pygame where angles increase clockwise, we needed to inverse the values
-                        -stop_angle,
-                        -start_angle
+                        (int(ant.pos.x), int(ant.pos.y)),
+                        (
+                            int(ant.pos.x + np.cos(start_angle) * MAX_VISION_RANGE),
+                            int(ant.pos.y + np.sin(start_angle) * MAX_VISION_RANGE)
+                        )
                     )
+
+                    pygame.draw.line(
+                        canvas,
+                        colour,
+                        (int(ant.pos.x), int(ant.pos.y)),
+                        (
+                            int(ant.pos.x + np.cos(stop_angle) * MAX_VISION_RANGE),
+                            int(ant.pos.y + np.sin(stop_angle) * MAX_VISION_RANGE)
+                        )
+                    )
+
+                    for vision_idx, view_range in enumerate(view_ranges):
+                        # compute distance to the center of each area
+                        draw_distance =  view_range / 2 if vision_idx <= 0 \
+                            else view_ranges[vision_idx - 1] + (view_range - view_ranges[vision_idx - 1]) / 2
+                        # display number of entities in each density area
+                        self._draw_text(
+                            canvas,
+                            font,
+                            int(ant.pos.x + np.cos(central_angle) * draw_distance),
+                            int(ant.pos.y + np.sin(central_angle) * draw_distance),
+                            f"{ant.density_areas[segment_idx][vision_idx]['food']}",
+                            (0, 0, 0)
+                        )
+
+                        # Draw arcs delimiting the vision ranges and density areas
+                        pygame.draw.arc(
+                            canvas,
+                            colour,
+                            (int(ant.pos.x - view_range), int(ant.pos.y - view_range), view_range * 2,
+                             view_range * 2),
+                    # To align to pygame where angles increase clockwise, we needed to inverse the values
+                            -stop_angle,
+                            -start_angle
+                        )
 
         # Draw wall distance indicators
         # for segment_idx, distance in self.ant.wall_distances.items():
@@ -1193,45 +1210,47 @@ class AntColonyEnv(ParallelEnv):
         #         )
 
         # Draw nearest ant distance indicators
-        for segment_idx, distance_info in self.ant.nearest_food_distances.items():
-            distance, angle = distance_info
-            if distance is not None and distance != 0.0:
-                # Calculate the central angle of the segment
-                angle_range, segment_color, _ = vision_segments[segment_idx]
+        for agent in self.agents:
+            ant = self.ants[agent]
+            for segment_idx, distance_info in ant.nearest_food_distances.items():
+                distance, angle = distance_info
+                if distance is not None and distance != 0.0:
+                    # Calculate the central angle of the segment
+                    angle_range, segment_color, _ = vision_segments[segment_idx]
 
-                # Calculate end point based on nearest ant distance
-                end_x = int(self.ant.pos.x + math.cos(angle) * (1 - distance) * MAX_VISION_RANGE)
-                end_y = int(self.ant.pos.y + math.sin(angle) * (1 - distance) * MAX_VISION_RANGE)
+                    # Calculate end point based on nearest ant distance
+                    end_x = int(ant.pos.x + math.cos(angle) * (1 - distance) * MAX_VISION_RANGE)
+                    end_y = int(ant.pos.y + math.sin(angle) * (1 - distance) * MAX_VISION_RANGE)
 
-                # Draw a line from the ant to the nearest ant
-                pygame.draw.line(
-                    canvas,
-                    segment_color,  # black color for nearest ant distance
-                    (int(self.ant.pos.x), int(self.ant.pos.y)),
-                    (end_x, end_y),
-                    1
+                    # Draw a line from the ant to the nearest ant
+                    pygame.draw.line(
+                        canvas,
+                        segment_color,  # black color for nearest ant distance
+                        (int(ant.pos.x), int(ant.pos.y)),
+                        (end_x, end_y),
+                        1
+                    )
+
+            # Draw agent last; to ensure visibility.
+            pygame.draw.rect(
+                canvas,
+                (0, 0, 180),
+                (
+                    ant.pos.x - ANT_DIM.x / 2.,
+                    ant.pos.y - ANT_DIM.y / 2.,
+                    ANT_DIM.x,
+                    ANT_DIM.y
                 )
-
-        # Draw agent last; to ensure visibility.
-        pygame.draw.rect(
-            canvas,
-            (0, 0, 180),
-            (
-                self.ant.pos.x - ANT_DIM.x / 2.,
-                self.ant.pos.y - ANT_DIM.y / 2.,
-                ANT_DIM.x,
-                ANT_DIM.y
             )
-        )
-        pygame.draw.line(
-            canvas,
-            (0, 0, 180),
-            (int(self.ant.pos.x), int(self.ant.pos.y)),
-            (
-                int(self.ant.pos.x + np.cos(self.ant.theta) * ANT_DIM.x * 3),
-                int(self.ant.pos.y + np.sin(self.ant.theta) * ANT_DIM.x * 3)
+            pygame.draw.line(
+                canvas,
+                (0, 0, 180),
+                (int(ant.pos.x), int(ant.pos.y)),
+                (
+                    int(ant.pos.x + np.cos(ant.theta) * ANT_DIM.x * 3),
+                    int(ant.pos.y + np.sin(ant.theta) * ANT_DIM.x * 3)
+                )
             )
-        )
 
         if self.render_mode == 'human':
             self.window.blit(canvas, canvas.get_rect())
@@ -1250,13 +1269,13 @@ if __name__ == "__main__":
     env = AntColonyEnv(render_mode='human')
 
     total_reward = 0
-    obs, info = env.reset()
+    observations, infos = env.reset()
 
     manual_mode = True
     manual_action = [0, 0, 0, 0]
 
     done = False
-    while not done:
+    while env.agents:
         if manual_mode:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -1276,13 +1295,11 @@ if __name__ == "__main__":
                     if event.key == pygame.K_LEFT:  manual_action[2] = 0
                     if event.key == pygame.K_RIGHT: manual_action[3] = 0
             action = manual_action
-            if done: break
 
-        obs, reward, terminated, truncated, info = env.step(action)
-        done = terminated or truncated
-        total_reward += reward
-
-        if done: break
+        if done is True:
+            break
+        actions = {agent: action for agent in env.agents}
+        observations, rewards, terminations, truncations, infos = env.step(actions)
 
     env.close()
     print('Cumulative score:', total_reward)
