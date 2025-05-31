@@ -1,4 +1,5 @@
 import copy
+import functools
 import logging
 import sys, math
 from collections import namedtuple
@@ -6,6 +7,7 @@ import numpy as np
 import pygame
 
 from gymnasium import spaces
+from gymnasium.spaces import Box, Tuple, Dict
 from gymnasium.utils import colorize, seeding
 from pettingzoo import ParallelEnv
 from pettingzoo.utils import parallel_to_aec, wrappers
@@ -673,12 +675,6 @@ class AntColonyEnv(ParallelEnv):
         self.nr_of_ants = nr_of_ants
         self.nr_of_food = nr_of_food
 
-        # self.target_data = {
-        #     'angle': [],
-        #     'distance': [],
-        #     'action': []
-        # }
-
         self.food_sources = None
         self.viewer = None
         self.state = None
@@ -702,23 +698,48 @@ class AntColonyEnv(ParallelEnv):
         # circular arena
         self.ant_arena = arena_sizes( vec2d(arena_center[0], arena_center[1]), arena_radius)
 
-        # Determine the number of additional observations
-        num_segments = len(vision_segments)
-        additional_obs = num_segments * 2  # wall_distance and nearest_ant_distance per segment
+        # TODO: to be removed
+        # # Determine the number of additional observations
+        # num_segments = len(vision_segments)
+        # additional_obs = num_segments * 2  # wall_distance and nearest_ant_distance per segment
+        #
+        # # Calculate the total number of observation elements
+        # base_obs_length = 14  # Number of elements in the initial 'result' list
+        # total_obs_length = base_obs_length + additional_obs
+        #
+        # high = np.array([np.finfo(np.float32).max] * total_obs_length)
+        #
+        # # Update the observation space to include additional observations
+        # self.observation_space = spaces.Box(
+        #     low=-high,
+        #     high=high,
+        #     shape=(total_obs_length,),
+        #     dtype=np.float32
+        # )
 
-        # Calculate the total number of observation elements
-        base_obs_length = 14  # Number of elements in the initial 'result' list
-        total_obs_length = base_obs_length + additional_obs
+    # Observation space should be defined here.
+    # lru_cache allows observation and action spaces to be memoized, reducing clock cycles required to get each agent's space.
+    # If your spaces change over time, remove this line (disable caching).
+    @functools.lru_cache(maxsize=None)
+    def observation_space(self, agent):
+        float_max = np.finfo(np.float32).max
+        float_min = np.finfo(np.float32).min
+        env_obs_spaces = {
+            'r_norm': Box(0.0,1.0),
+            'theta_norm': Box(0.0, 1.0),
+            'speed': Box(float_min, float_max),
+            'theta': Box(0.0, 2 * math.pi),
+            'theta_dot': Box(0.0, float_max),
+            'vision_segments_distances': Box(0.0, 1.0,(5,0)),
+        }
 
-        high = np.array([np.finfo(np.float32).max] * total_obs_length)
+        return Dict(env_obs_spaces)
 
-        # Update the observation space to include additional observations
-        self.observation_space = spaces.Box(
-            low=-high,
-            high=high,
-            shape=(total_obs_length,),
-            dtype=np.float32
-        )
+    # Action space should be defined here.
+    # If your spaces change over time, remove this line (disable caching).
+    @functools.lru_cache(maxsize=None)
+    def action_space(self, agent):
+        return Box(-1.0, 1.0, (3,), dtype=np.float32)
 
     def seed(self, seed=None):
         return seeding.np_random(seed)
@@ -1266,8 +1287,10 @@ if __name__ == "__main__":
     manual_mode = True
     manual_action = [0, 0, 0, 0]
 
+    terminations = [False]
+    truncations = [False]
     done = False
-    while env.agents:
+    while env.agents and not any(terminations) and not any(truncations):
         if manual_mode:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -1292,6 +1315,8 @@ if __name__ == "__main__":
             break
         actions = {agent: action for agent in env.agents}
         observations, rewards, terminations, truncations, infos = env.step(actions)
+        terminations = [terminations[a] for a in terminations]
+        truncations = [truncations[a] for a in truncations]
 
     env.close()
     print('Cumulative score:', total_reward)
