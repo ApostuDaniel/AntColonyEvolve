@@ -671,7 +671,6 @@ class AntColonyEnv(ParallelEnv):
     def __init__(self, nr_of_ants=10, nr_of_food=20, render_mode=None):
         self.np_random, seed = self.seed(seed=69)
 
-        self.ant = None
         self.ants = None
         self.possible_agents = [f"ant_{i}" for i in range(nr_of_ants)]
         self.nr_of_ants = nr_of_ants
@@ -838,7 +837,6 @@ class AntColonyEnv(ParallelEnv):
         self.ant_trail.append(pos)
 
     def _destroy(self):
-        self.ant = None
         self.ants = {}
         self.ant_trail = []
         self.food_sources = []
@@ -869,8 +867,6 @@ class AntColonyEnv(ParallelEnv):
         self.time_offset = 0.0
 
         self.agents = copy.deepcopy(self.possible_agents)
-
-        self.ant = Ant(self.ant_arena.arena_center)
 
         self.ants = {}
         rng = np.random.default_rng()
@@ -1126,12 +1122,6 @@ class AntColonyEnv(ParallelEnv):
                 logger.error("Cannot draw ant with provided coordinates.")
 
         if DRAW_ANT_VISION:
-            # pygame.draw.circle(
-            #     canvas,
-            #     (225, 225, 230, 255),
-            #     (int(self.ant.pos.x), int(self.ant.pos.y)),
-            #     MAX_VISION_RANGE
-            # )
 
             font = pygame.font.SysFont('Arial', 9)
             for segment_idx, ((angle_range_start, angle_range_end), colour, _) in enumerate(vision_segments):
