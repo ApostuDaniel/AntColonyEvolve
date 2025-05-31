@@ -660,23 +660,25 @@ class Ant():
         self._move()
 
 
-class AntColonyEnv(gym.Env):
+class AntColonyEnv(ParallelEnv):
     metadata = {
         'name': 'ant-colony-v0',
         'render_modes': ['human', 'rgb_array'],
         'render_fps': SIM_FPS
     }
 
-    def __init__(self, render_mode=None):
+    def __init__(self, nr_of_ants=20, render_mode=None):
         self.np_random, seed = self.seed(seed=69)
 
         self.ant = None
+        self.ants = {}
+        self.possible_agents = [f"ant_{i}" for i in range(nr_of_ants)]
 
-        self.target_data = {
-            'angle': [],
-            'distance': [],
-            'action': []
-        }
+        # self.target_data = {
+        #     'angle': [],
+        #     'distance': [],
+        #     'action': []
+        # }
 
         self.food_sources = None
         self.viewer = None
@@ -687,9 +689,6 @@ class AntColonyEnv(gym.Env):
         self.t_limit = TIME_LIMIT
 
         self.time_offset = None
-        self.snapshot_interval_sec = 1.0  # As per your pheromone data generation
-        self.frames_per_snapshot = int(self.snapshot_interval_sec * SIM_FPS)
-
         self.actions = []
 
         assert render_mode is None or render_mode in type(self).metadata["render_modes"]
@@ -698,11 +697,11 @@ class AntColonyEnv(gym.Env):
         self.window = None
         self.clock = None
 
-        arena_center = (SCREEN_W / 2.0, SCREEN_H / 2.0),
+        arena_center = SCREEN_W / 2.0, SCREEN_H / 2.0
         arena_radius = min(SCREEN_W, SCREEN_H) / 2.0 - min(SCREEN_W, SCREEN_H) * BOUNDARY_SCALE
 
         # circular arena
-        self.ant_arena = arena_sizes( vec2d(SCREEN_W / 2.0, SCREEN_H / 2.0), min(SCREEN_W, SCREEN_H) / 2.0 - min(SCREEN_W, SCREEN_H) * BOUNDARY_SCALE)
+        self.ant_arena = arena_sizes( vec2d(arena_center[0], arena_center[1]), arena_radius)
 
         # Determine the number of additional observations
         num_segments = len(vision_segments)
@@ -725,91 +724,87 @@ class AntColonyEnv(gym.Env):
     def seed(self, seed=None):
         return seeding.np_random(seed)
 
-    @property
-    def _snapshot_index(self):
-        return ((self.t + self.time_offset) // self.frames_per_snapshot)
+    # def _get_interval_data(self, trail, start_time, interval=False):
+    #     theta = -1
+    #     threshold = 5
+    #     time = start_time + 1
+    #     time_offset = 0
+    #     distance = 0
+    #     while theta < 0 and time != len(trail):
+    #         try:
+    #             dx, dy = trail[time] - trail[start_time]
+    #         except IndexError:
+    #             break
+    #         if dx == 0 and dy == 0:
+    #             time_offset += 1
+    #         else:
+    #             current_distance = np.sqrt(dx ** 2 + dy ** 2)
+    #             if current_distance > threshold:
+    #                 theta = math.atan2(dy, dx) % (2 * math.pi)
+    #                 distance = current_distance
+    #         time += 1
+    #
+    #     return distance, theta, (time - start_time), time_offset
+    #
+    # def _get_angle_from_trajectory(self, trail, start_time):
+    #     _, angle, _, _ = self._get_interval_data(trail, start_time)
+    #     return angle
 
-    def _get_interval_data(self, trail, start_time, interval=False):
-        theta = -1
-        threshold = 5
-        time = start_time + 1
-        time_offset = 0
-        distance = 0
-        while theta < 0 and time != len(trail):
-            try:
-                dx, dy = trail[time] - trail[start_time]
-            except IndexError:
-                break
-            if dx == 0 and dy == 0:
-                time_offset += 1
-            else:
-                current_distance = np.sqrt(dx ** 2 + dy ** 2)
-                if current_distance > threshold:
-                    theta = math.atan2(dy, dx) % (2 * math.pi)
-                    distance = current_distance
-            time += 1
-
-        return distance, theta, (time - start_time), time_offset
-
-    def _get_angle_from_trajectory(self, trail, start_time):
-        _, angle, _, _ = self._get_interval_data(trail, start_time)
-        return angle
-
-    def _identify_overlapping_grid_cells(
-            self,
-            pos: tuple,
-            bounding_box: int,
-            grid_size: tuple = (SCREEN_W, SCREEN_H),
-            coarse_grid_size: tuple = (20, 20)
-    ) -> list:
-        """
-        Identify which cells in the discretized grid an ant overlaps with based on its position and bounding box.
-
-        Parameters:
-        - x (float): X-coordinate of the ant in simulation space (0 <= x < grid_width).
-        - y (float): Y-coordinate of the ant in simulation space (0 <= y < grid_height).
-        - bounding_box (int): Size of the ant's bounding box in pixels (assumed square).
-        - grid_size (tuple): Size of the simulation grid in pixels (height, width). Default is (900, 900).
-        - coarse_grid_size (tuple): Size of the discretized grid (height, width). Default is (20, 20).
-
-        Returns:
-        - List[Tuple[int, int]]: List of (row, column) indices of grid cells overlapped by the ant.
-        """
-        x, y = pos
-
-        fine_height, fine_width = grid_size
-        coarse_height, coarse_width = coarse_grid_size
-
-        # Calculate discretization factors
-        factor_y = fine_height / coarse_height
-        factor_x = fine_width / coarse_width
-
-        # Calculate bounding box boundaries in simulation space
-        half_box = bounding_box / 2
-        x_min = max(x - half_box, 0)
-        x_max = min(x + half_box, fine_width - 1)
-        y_min = max(y - half_box, 0)
-        y_max = min(y + half_box, fine_height - 1)
-
-        # Map simulation space boundaries to coarse grid indices
-        row_min = int(math.floor(y_min / factor_y))
-        row_max = int(math.floor(y_max / factor_y))
-        col_min = int(math.floor(x_min / factor_x))
-        col_max = int(math.floor(x_max / factor_x))
-
-        # Ensure indices are within coarse grid bounds
-        row_min = max(row_min, 0)
-        row_max = min(row_max, coarse_height - 1)
-        col_min = max(col_min, 0)
-        col_max = min(col_max, coarse_width - 1)
-
-        # Generate list of overlapping grid cells
-        overlapping_cells = []
-        for row in range(row_min, row_max + 1):
-            for col in range(col_min, col_max + 1):
-                overlapping_cells.append((row, col))
-
-        return overlapping_cells
+    # def _identify_overlapping_grid_cells(
+    #         self,
+    #         pos: tuple,
+    #         bounding_box: int,
+    #         grid_size: tuple = (SCREEN_W, SCREEN_H),
+    #         coarse_grid_size: tuple = (20, 20)
+    # ) -> list:
+    #     """
+    #     Identify which cells in the discretized grid an ant overlaps with based on its position and bounding box.
+    #
+    #     Parameters:
+    #     - x (float): X-coordinate of the ant in simulation space (0 <= x < grid_width).
+    #     - y (float): Y-coordinate of the ant in simulation space (0 <= y < grid_height).
+    #     - bounding_box (int): Size of the ant's bounding box in pixels (assumed square).
+    #     - grid_size (tuple): Size of the simulation grid in pixels (height, width). Default is (900, 900).
+    #     - coarse_grid_size (tuple): Size of the discretized grid (height, width). Default is (20, 20).
+    #
+    #     Returns:
+    #     - List[Tuple[int, int]]: List of (row, column) indices of grid cells overlapped by the ant.
+    #     """
+    #     x, y = pos
+    #
+    #     fine_height, fine_width = grid_size
+    #     coarse_height, coarse_width = coarse_grid_size
+    #
+    #     # Calculate discretization factors
+    #     factor_y = fine_height / coarse_height
+    #     factor_x = fine_width / coarse_width
+    #
+    #     # Calculate bounding box boundaries in simulation space
+    #     half_box = bounding_box / 2
+    #     x_min = max(x - half_box, 0)
+    #     x_max = min(x + half_box, fine_width - 1)
+    #     y_min = max(y - half_box, 0)
+    #     y_max = min(y + half_box, fine_height - 1)
+    #
+    #     # Map simulation space boundaries to coarse grid indices
+    #     row_min = int(math.floor(y_min / factor_y))
+    #     row_max = int(math.floor(y_max / factor_y))
+    #     col_min = int(math.floor(x_min / factor_x))
+    #     col_max = int(math.floor(x_max / factor_x))
+    #
+    #     # Ensure indices are within coarse grid bounds
+    #     row_min = max(row_min, 0)
+    #     row_max = min(row_max, coarse_height - 1)
+    #     col_min = max(col_min, 0)
+    #     col_max = min(col_max, coarse_width - 1)
+    #
+    #     # Generate list of overlapping grid cells
+    #     overlapping_cells = []
+    #     for row in range(row_min, row_max + 1):
+    #         for col in range(col_min, col_max + 1):
+    #             overlapping_cells.append((row, col))
+    #
+    #     return overlapping_cells
 
 
     def _angle_difference(self, angle1, angle2):
@@ -874,7 +869,7 @@ class AntColonyEnv(gym.Env):
         self.food_sources = []
         rng = np.random.default_rng()
         for _ in range(20):
-            max_draw_radius = self.ant_arena.arena_radius * 0.85 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING)
+            max_draw_radius = self.ant_arena.arena_radius * 0.85 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING) * 2
             x, y = rng.uniform(-max_draw_radius, max_draw_radius, size=2)
             quantity = int(rng.uniform(10, MAX_FOOD_QUANTITY))
             self.food_sources.append((self.ant_arena.arena_center.x + int(x), self.ant_arena.arena_center.y + int(y), quantity))
@@ -898,88 +893,88 @@ class AntColonyEnv(gym.Env):
             pygame.display.quit()
             pygame.quit()
 
-    def _get_action(self, dt):
-        target_data = {
-            'angle': [],
-            'distance': [],
-            'action': [],  # FORWARD, BACKWARD, TURN-LEFT, TURN-RIGHT, STOP, ...
-        }
+    # def _get_action(self, dt):
+    #     target_data = {
+    #         'angle': [],
+    #         'distance': [],
+    #         'action': [],  # FORWARD, BACKWARD, TURN-LEFT, TURN-RIGHT, STOP, ...
+    #     }
+    #
+    #     action = [0, 0, 0, 0]
+    #     info = {'distance': 0, 'target_angle': 0, 'rotation': 0}
+    #     time = 0
+    #     while self.t + time < len(self.target_trail) - 1 and time < dt:
+    #         # Calculate current and next position
+    #         current_pos = self.ant.pos
+    #         next_pos = self.target_trail[self.t + int(time) + 1]
+    #
+    #         # Calculate distance and angle to the next position
+    #         dx = next_pos[0] - current_pos[0]
+    #         dy = next_pos[1] - current_pos[1]
+    #         distance = math.sqrt(dx ** 2 + dy ** 2)
+    #         info['distance'] = distance
+    #         angle_to_target = math.atan2(dy, dx)
+    #         info['target_angle'] = angle_to_target
+    #
+    #         # Determine angle difference from current orientation
+    #         angle_diff = self._angle_difference(self.ant.theta, angle_to_target)
+    #         info['rotation'] = angle_diff
+    #
+    #         if distance > 0.05:
+    #             action[0] = 1
+    #
+    #         if angle_diff < 0:
+    #             action[2] = 1
+    #         elif angle_diff > 0:
+    #             action[3] = 1
+    #
+    #         time += 1
+    #
+    #     return action, info
 
-        action = [0, 0, 0, 0]
-        info = {'distance': 0, 'target_angle': 0, 'rotation': 0}
-        time = 0
-        while self.t + time < len(self.target_trail) - 1 and time < dt:
-            # Calculate current and next position
-            current_pos = self.ant.pos
-            next_pos = self.target_trail[self.t + int(time) + 1]
-
-            # Calculate distance and angle to the next position
-            dx = next_pos[0] - current_pos[0]
-            dy = next_pos[1] - current_pos[1]
-            distance = math.sqrt(dx ** 2 + dy ** 2)
-            info['distance'] = distance
-            angle_to_target = math.atan2(dy, dx)
-            info['target_angle'] = angle_to_target
-
-            # Determine angle difference from current orientation
-            angle_diff = self._angle_difference(self.ant.theta, angle_to_target)
-            info['rotation'] = angle_diff
-
-            if distance > 0.05:
-                action[0] = 1
-
-            if angle_diff < 0:
-                action[2] = 1
-            elif angle_diff > 0:
-                action[3] = 1
-
-            time += 1
-
-        return action, info
-
-    def _get_stepped_action(self, dt):
-        action = [0, 0, 0, 0]
-
-        if self.target_data is None or len(self.target_data['angle']) == 0:
-            self.target_data = {
-                'angle': [],
-                'distance': [],
-                'action': []
-            }
-            if self.t + dt < len(self.target_trail) - 1:
-                # Calculate current and next position
-                current_pos = self.ant.pos
-                next_pos = self.target_trail[self.t + int(dt)]
-
-                # Calculate distance and angle to the next position
-                dx = next_pos[0] - current_pos[0]
-                dy = next_pos[1] - current_pos[1]
-                distance = math.sqrt(dx ** 2 + dy ** 2)
-                self.target_data['distance'] = [distance / dt for _ in range(dt)]
-                angle_to_target = math.atan2(dy, dx)
-                self.target_data['angle'] = [angle_to_target for _ in range(dt)]
-
-                # Determine angle difference from current orientation
-                angle_diff = self._angle_difference(self.ant.theta, angle_to_target)
-
-                if distance > 0.05:
-                    action[0] = 1
-
-                if angle_diff < 0:
-                    action[2] = 1
-                elif angle_diff > 0:
-                    action[3] = 1
-
-            else:
-                self.target_data['distance'].append(None)
-                self.target_data['angle'].append(None)
-
-        target_data = {
-            'angle': self.target_data['angle'].pop(),
-            'distance': self.target_data['distance'].pop()
-        }
-
-        return action, target_data
+    # def _get_stepped_action(self, dt):
+    #     action = [0, 0, 0, 0]
+    #
+    #     if self.target_data is None or len(self.target_data['angle']) == 0:
+    #         self.target_data = {
+    #             'angle': [],
+    #             'distance': [],
+    #             'action': []
+    #         }
+    #         if self.t + dt < len(self.target_trail) - 1:
+    #             # Calculate current and next position
+    #             current_pos = self.ant.pos
+    #             next_pos = self.target_trail[self.t + int(dt)]
+    #
+    #             # Calculate distance and angle to the next position
+    #             dx = next_pos[0] - current_pos[0]
+    #             dy = next_pos[1] - current_pos[1]
+    #             distance = math.sqrt(dx ** 2 + dy ** 2)
+    #             self.target_data['distance'] = [distance / dt for _ in range(dt)]
+    #             angle_to_target = math.atan2(dy, dx)
+    #             self.target_data['angle'] = [angle_to_target for _ in range(dt)]
+    #
+    #             # Determine angle difference from current orientation
+    #             angle_diff = self._angle_difference(self.ant.theta, angle_to_target)
+    #
+    #             if distance > 0.05:
+    #                 action[0] = 1
+    #
+    #             if angle_diff < 0:
+    #                 action[2] = 1
+    #             elif angle_diff > 0:
+    #                 action[3] = 1
+    #
+    #         else:
+    #             self.target_data['distance'].append(None)
+    #             self.target_data['angle'].append(None)
+    #
+    #     target_data = {
+    #         'angle': self.target_data['angle'].pop(),
+    #         'distance': self.target_data['distance'].pop()
+    #     }
+    #
+    #     return action, target_data
 
     def step(self, action):
         """
