@@ -257,19 +257,12 @@ class Ant():
 
         self.max_turn_duration = 0.2  # Time to reach full turn rate in seconds
 
-        # Detection scalar:
-        # num of ants in cone, or distance to closes ant
-        self.V_f_l1 = None
-        self.V_f_l2 = None
-        self.V_f = None
-        self.V_f_r2 = None
-        self.V_f_r1 = None
         self.vision_range = MAX_VISION_RANGE
 
         # Initialize distance attributes for each vision segment
-        self.composite_scores = {}
         self.wall_distances = {}
         self.nearest_food_distances = {}
+        self.nearest_food_angles = {}
         # areas delimited by vision segments and vision ranges (portion of a pie slice)
         self.density_areas = {}
 
@@ -380,7 +373,7 @@ class Ant():
 
     def _detect_distances(self, detected_food):
         """
-        Detect distances to walls and ants, and compute a hierarchical composite score for each segment.
+        Detect distances to walls and ants.
         Returns distances as positive values for ants and negative values for walls, prioritizing the closest object.
         """
         for idx, (angle_range, _, _) in enumerate(vision_segments):
@@ -388,8 +381,8 @@ class Ant():
             central_angle = ((self.theta + sum(angle_range) / 2) % (2 * math.pi))
 
             # Initialize scaled distances
-            wall_distance_scaled = 0.0
-            food_distance_scaled = (0.0,0)
+            food_distance_scaled = 0.0
+            food_angle = 0
 
             # Get wall distance
             # compute_distance_to_wall already returns the distance scaled
@@ -402,75 +395,60 @@ class Ant():
             food_in_segment = detected_food.get(idx, [])
             if food_in_segment:
                 # Use generator expression instead of list comprehension for efficiency
-                raw_food_distance = min(
+                raw_food_distance, food_angle = min(
                     ((math.hypot(food[0] - self.pos.x, food[1] - self.pos.y), food[2])
                      for food in food_in_segment),
                     key=lambda x: x[0],
                     default=None
                 )
 
-                if raw_food_distance is not None and raw_food_distance[0] <= self.vision_range:
-                    food_distance_scaled = 1.0 - (raw_food_distance[0] / self.vision_range), raw_food_distance[1]
 
-            # TODO: remove composite scores
-            # Determine composite score based on closest object
-            if food_distance_scaled[0] > 0 and (wall_distance_scaled == 0 or
-                                            raw_food_distance[0] < raw_wall_distance):
-                composite_score = food_distance_scaled[0]  # Positive for ants
-            elif wall_distance_scaled > 0:
-                composite_score = -wall_distance_scaled  # Negative for walls
-            else:
-                composite_score = 0.0
+                if raw_food_distance is not None and raw_food_distance <= self.vision_range:
+                    food_distance_scaled = 1.0 - (raw_food_distance / self.vision_range)
 
             # Store all scores at once
-            self.composite_scores[idx] = composite_score
             self.wall_distances[idx] = wall_distance_scaled
             self.nearest_food_distances[idx] = food_distance_scaled
+            self.nearest_food_angles[idx] = food_angle
 
-    def _detect_vision(self, detected_food: dict, total_colony_size: int, max_value: float = 1.0):
+    def _normalize_food_density(self, food_density_areas: dict, max_food_size: int, max_value: float = 1.0):
         """
-        Scales the number of detected food in each vision segment using an exponential function,
-        ensuring that the scaled value reaches approximately max_value when 20% of the colony is detected
-        in a single segment.
+        Scales the number of detected food in each density area using an exponential function,
+        ensuring that the scaled value reaches approximately max_value when the maximum food size is detected.
 
         Parameters:
-        - detected_food (dict):
-            A dictionary mapping segment names to lists of detected ants.
+        - food_density_areas (dict):
+            A dictionary mapping segment names and vision ranges to food quantity detected.
 
-        - total_colony_size (int):
-            The total number of ants in the colony.
+        - max_food_size (int):
+            Max quantity for food resource.
 
         - max_value (float, optional):
             The maximum value that the scaled output can reach for each segment.
             Default is 1.0.
 
         Assigns:
-        - self.V_f_l1, self.V_f_l2, self.V_f, self.V_f_r2,
-        self.V_f_r1, self.V_b_r, self.V_b, self.V_b_l:
-            The scaled vision values for each segment.
+        - food_density_areas (dict): density scaled between 0.0 and 1.0
         """
         # Constant k to ensure the scaled value reaches ~99% of max_value at adjusted_fraction = 1
         k = 4.60517  # k = -ln(0.01)
 
-        vision_counts = [len(detected_food[i]) for i in range(len(vision_segments))]
+        for segment_idx in range(len(vision_segments)):
+            for range_idx in range(len(view_ranges)):
+                food_quantity = food_density_areas[segment_idx][range_idx]["food"]
 
-        scaled_vision = []
-        for ants_detected in vision_counts:
-            # Normalize ants_detected by total_colony_size
-            fraction_detected = ants_detected / total_colony_size if total_colony_size > 0 else 0.0
+                # Normalize food_quantity by max_food_size
+                fraction_detected = food_quantity / max_food_size if max_food_size > 0 else 0.0
 
-            # Adjust fraction_detected so that 20% of the colony corresponds to an adjusted fraction of 1
-            adjusted_fraction = min(fraction_detected / 0.2, 1.0)
+                # Adjust fraction_detected so that food_quantity larger or equal to food size corresponds to an adjusted fraction of 1
+                adjusted_fraction = min(fraction_detected, 1.0)
 
-            # Apply exponential scaling
-            scaled_value = max_value * (1 - math.exp(-k * adjusted_fraction))
+                # Apply exponential scaling
+                scaled_value = max_value * (1 - math.exp(-k * adjusted_fraction))
 
-            scaled_vision.append(scaled_value)
+                food_density_areas[segment_idx][range_idx]["food"] = scaled_value
 
-        # Assign the scaled values to the instance variables
-        (
-            self.V_f_l1, self.V_f_l2, self.V_f, self.V_f_r2,self.V_f_r1,
-        ) = scaled_vision
+        return food_density_areas
 
     def _get_fitting_vision_range_index(self, distance: float, vision_ranges: list):
         for i in range(len(vision_ranges)):
@@ -616,8 +594,7 @@ class Ant():
         """
         if others is not None:
             detected_food, density_areas = self._detect_nearby_food(others)
-            self.density_areas = density_areas
-            self._detect_vision(detected_food, len(others))
+            self.density_areas = self._normalize_food_density(density_areas, MAX_FOOD_QUANTITY)
             self._detect_distances(detected_food)
 
         # Get the agent's position in polar coordinates
@@ -630,18 +607,20 @@ class Ant():
             self.speed,  # Current speed
             self.theta,  # Current orientation
             self.theta_dot,  # Angular velocity
-            self.V_f_l1,  # Vision segment: Forward Left 1
-            self.V_f_l2,  # Vision segment: Forward Left 2
-            self.V_f,  # Vision segment: Forward
-            self.V_f_r2,  # Vision segment: Forward Right 2
-            self.V_f_r1,  # Vision segment: Forward Right 1
         ]
 
-        # Include composite scores for each vision segment
-        # Ensure that the segments are ordered consistently
-        for segment_idx, (angle_range, _, _) in enumerate(vision_segments):
-            composite_score = self.composite_scores.get(segment_idx, 0.0)
-            result.append(composite_score)
+        # add scaled nearest wall distances per vision segment
+        result.extend(self.wall_distances)
+        # add nearest food distances per vision segment
+        result.extend(self.nearest_food_distances)
+        # add angle to nearest food per vision segment
+        result.extend(self.nearest_food_angles)
+
+        # Include the food density for each food detection area
+
+        for segment_idx in range(len(vision_segments)):
+            for range_idx in range(len(view_ranges)):
+                result.append(density_areas[segment_idx][range_idx]['food'])
 
         return result
 
@@ -730,7 +709,10 @@ class AntColonyEnv(ParallelEnv):
             'speed': Box(float_min, float_max),
             'theta': Box(0.0, 2 * math.pi),
             'theta_dot': Box(0.0, float_max),
-            'vision_segments_distances': Box(0.0, 1.0,(5,0)),
+            'vision_segments_wall_distances': Box(0.0, 1.0, (len(vision_segments),)),
+            'vision_segments_food_distances': Box(0.0, 1.0,(len(vision_segments),)),
+            'vision_segments_food_angles': Box(0.0, 2 * math.pi, (len(vision_segments),)),
+            'density_areas': Box(0.0, 1.0,(len(vision_segments) * len(view_ranges),)),
         }
 
         return Dict(env_obs_spaces)
@@ -912,7 +894,8 @@ class AntColonyEnv(ParallelEnv):
 
         infos = {a: {
             'wall_distances': self.ants[a].wall_distances,
-            'nearest_ant_distances': self.ants[a].nearest_food_distances,
+            'nearest_food_distances': self.ants[a].nearest_food_distances,
+            'nearest_food_angles': self.ants[a].nearest_food_angles,
         } for a in self.agents}
 
         if self.render_mode == 'human':
@@ -1052,6 +1035,7 @@ class AntColonyEnv(ParallelEnv):
         infos = {a: {
             'wall_distances': self.ants[a].wall_distances,
             'nearest_ant_distances': self.ants[a].nearest_food_distances,
+            'nearest_food_angles': self.ants[a].nearest_food_angles,
         } for a in self.agents}
 
         return observations, rewards, terminations, truncations, infos
@@ -1186,7 +1170,7 @@ class AntColonyEnv(ParallelEnv):
                             font,
                             int(ant.pos.x + np.cos(central_angle) * draw_distance),
                             int(ant.pos.y + np.sin(central_angle) * draw_distance),
-                            f"{ant.density_areas[segment_idx][vision_idx]['food']}",
+                            f"{round(ant.density_areas[segment_idx][vision_idx]['food'], 2)}",
                             (0, 0, 0)
                         )
 
@@ -1225,8 +1209,8 @@ class AntColonyEnv(ParallelEnv):
         # Draw nearest ant distance indicators
         for agent in self.agents:
             ant = self.ants[agent]
-            for segment_idx, distance_info in ant.nearest_food_distances.items():
-                distance, angle = distance_info
+            for segment_idx, distance in ant.nearest_food_distances.items():
+                angle = ant.nearest_food_angles[segment_idx]
                 if distance is not None and distance != 0.0:
                     # Calculate the central angle of the segment
                     angle_range, segment_color, _ = vision_segments[segment_idx]
