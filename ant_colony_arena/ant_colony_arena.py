@@ -6,7 +6,6 @@ from collections import namedtuple
 import numpy as np
 import pygame
 
-from gymnasium import spaces
 from gymnasium.spaces import Box, Tuple, Dict
 from gymnasium.utils import colorize, seeding
 from pettingzoo import ParallelEnv
@@ -35,7 +34,7 @@ TIMESTEP = 1. / SIM_FPS  # Not sure if this will be necessary, given the fixed F
 TIME_LIMIT = SIM_FPS * 30  # 30 seconds
 
 ANT_DIM = vec2d(5, 5)
-AGENT_SPEED = 120.00  # Maximum ant speed observed in data (pixels)
+AGENT_SPEED = 30.00  # Maximum ant speed observed in data (pixels)
 TURN_RATE = 0.3575  # Maximum turning rate observed in data (radians)
 
 MAX_VISION_RANGE = 60
@@ -545,40 +544,23 @@ class Ant():
         if is_rectangle_in_circle(desired_pos[0], desired_pos[1], self.arena_center, self.arena_radius):
             self.pos = vec2d(desired_pos[0], desired_pos[1])
 
-    def set_action(self, action, distance=None, rotation=None):
-        forward = False
-        backward = False
-        turn_left = False
-        turn_right = False
-
-        if action[0] > 0.25: forward = True
-        if action[1] > 0.25: backward = True
-        if action[2] > 0.25: turn_left = True
-        if action[3] > 0.25: turn_right = True
+    def set_action(self, action):
+        forward, turn_left, turn_right = action
 
         self.desired_speed = 0
         self.desired_turn_speed = 0
 
-        if (forward and (not backward) and distance is not None):
-            # self.desired_speed = AGENT_SPEED # * TIMESTEP
-            self.desired_speed = distance
-        if (backward and (not forward) and distance is not None):
-            # self.desired_speed = -AGENT_SPEED # * TIMESTEP
-            self.desired_speed = -distance
+        self.desired_speed = forward * AGENT_SPEED
 
-        rotation = -TURN_RATE / 2 if turn_left else TURN_RATE / 2 if turn_right else 0
+        rotation = -TURN_RATE * turn_left if turn_left > turn_right else TURN_RATE * turn_right if turn_right > turn_left else 0
         self.theta += rotation
-        # if rotation is not None:
-        #     self.theta = rotation
-        # else:
-        #     self.theta = -1
 
         # If no turn, reset the turn timers
-        if not turn_left and not turn_right:
+        if turn_left == turn_right:
             self.turning_time_left = 0.0
             self.turning_time_right = 0.0
 
-        return [int(x) for x in [forward, backward, turn_left, turn_right]]
+        return [forward, turn_left, turn_right]
 
     def get_obs(self, others=None):
         """
@@ -1006,7 +988,7 @@ class AntColonyEnv(ParallelEnv):
         # print(movement_info['distance'], movement_info['angle'])
 
         for agent, action in actions.items():
-            self.ants[agent].set_action(action, AGENT_SPEED/15, 1)
+            self.ants[agent].set_action(action)
             # self.ant.set_action(auto_action, movement_info['distance'], self.target_angles[self.t][1])
             self.ants[agent].update()
 
@@ -1269,7 +1251,7 @@ if __name__ == "__main__":
     observations, infos = env.reset()
 
     manual_mode = True
-    manual_action = [0, 0, 0, 0]
+    manual_action = [0.0, 0.0, 0.0]
 
     terminations = [False]
     truncations = [False]
@@ -1284,20 +1266,19 @@ if __name__ == "__main__":
                         done = True
                     if event.key == pygame.K_r:
                         env.reset()
-                    if event.key == pygame.K_UP:    manual_action[0] = 1
-                    if event.key == pygame.K_DOWN:  manual_action[1] = 1
-                    if event.key == pygame.K_LEFT:  manual_action[2] = 1
-                    if event.key == pygame.K_RIGHT: manual_action[3] = 1
+                    if event.key == pygame.K_UP:    manual_action[0:3] = [0.5, 0.0, 0.0]
+                    if event.key == pygame.K_DOWN:  manual_action[0:3] = [-0.5, 0.0, 0.0]
+                    if event.key == pygame.K_LEFT:  manual_action[1], manual_action[2] = 0.7, 0.0
+                    if event.key == pygame.K_RIGHT: manual_action[1], manual_action[2] = 0.0, 0.7
                 elif event.type == pygame.KEYUP:
-                    if event.key == pygame.K_UP:    manual_action[0] = 0
-                    if event.key == pygame.K_DOWN:  manual_action[1] = 0
-                    if event.key == pygame.K_LEFT:  manual_action[2] = 0
-                    if event.key == pygame.K_RIGHT: manual_action[3] = 0
-            action = manual_action
+                    if event.key == pygame.K_UP:    manual_action[0] = 0.0
+                    if event.key == pygame.K_DOWN:  manual_action[0] = 0.0
+                    if event.key == pygame.K_LEFT:  manual_action[1] = 0.0
+                    if event.key == pygame.K_RIGHT:  manual_action[2] = 0.0
 
         if done is True:
             break
-        actions = {agent: action for agent in env.agents}
+        actions = {agent: manual_action for agent in env.agents}
         observations, rewards, terminations, truncations, infos = env.step(actions)
         terminations = [terminations[a] for a in terminations]
         truncations = [truncations[a] for a in truncations]
