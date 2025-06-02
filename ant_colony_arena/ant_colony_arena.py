@@ -666,25 +666,6 @@ class AntColonyEnv(ParallelEnv):
         # circular arena
         self.ant_arena = arena_sizes( vec2d(arena_center[0], arena_center[1]), arena_radius)
 
-        # TODO: to be removed
-        # # Determine the number of additional observations
-        # num_segments = len(vision_segments)
-        # additional_obs = num_segments * 2  # wall_distance and nearest_ant_distance per segment
-        #
-        # # Calculate the total number of observation elements
-        # base_obs_length = 14  # Number of elements in the initial 'result' list
-        # total_obs_length = base_obs_length + additional_obs
-        #
-        # high = np.array([np.finfo(np.float32).max] * total_obs_length)
-        #
-        # # Update the observation space to include additional observations
-        # self.observation_space = spaces.Box(
-        #     low=-high,
-        #     high=high,
-        #     shape=(total_obs_length,),
-        #     dtype=np.float32
-        # )
-
     # Observation space should be defined here.
     # lru_cache allows observation and action spaces to be memoized, reducing clock cycles required to get each agent's space.
     # If your spaces change over time, remove this line (disable caching).
@@ -695,7 +676,7 @@ class AntColonyEnv(ParallelEnv):
         env_obs_spaces = {
             'r_norm': Box(0.0,1.0),
             'theta_norm': Box(0.0, 1.0),
-            'speed': Box(float_min, float_max),
+            'speed': Box(-AGENT_SPEED, AGENT_SPEED, (1,), np.float32),
             'theta': Box(0.0, 2 * math.pi),
             # 'theta_dot': Box(0.0, float_max),
             'vision_segments_wall_distances': Box(0.0, 1.0, (len(vision_segments),)),
@@ -807,17 +788,18 @@ class AntColonyEnv(ParallelEnv):
             diff -= 2 * math.pi
         return diff
 
-    def _reward_function(self, actions=None):
+    def _reward_function(self, agent, actions=None):
         """
-        Calculate the reward given the focal ant and the accuracy of its behaviour
-        over the trial, given the source data as the ground truth.
+        Calculate the reward of the ant based on whether their closest view range detects food
         """
-        if REWARD_TYPE.lower() == 'action':
-            return 1
-        elif REWARD_TYPE.lower() == 'coverage':
-            return 1
-        else:
-            return -69
+        ant = self.ants[agent]
+
+        reward = 0.0
+
+        for segment_idx in range(1, 4):
+            reward += ant.density_areas[segment_idx][0]['food']
+
+        return reward
 
     def get_observations(self, others=None):
         return {a: self.ants[a].get_obs(others) for a in self.agents}
@@ -897,89 +879,6 @@ class AntColonyEnv(ParallelEnv):
             pygame.display.quit()
             pygame.quit()
 
-    # def _get_action(self, dt):
-    #     target_data = {
-    #         'angle': [],
-    #         'distance': [],
-    #         'action': [],  # FORWARD, BACKWARD, TURN-LEFT, TURN-RIGHT, STOP, ...
-    #     }
-    #
-    #     action = [0, 0, 0, 0]
-    #     info = {'distance': 0, 'target_angle': 0, 'rotation': 0}
-    #     time = 0
-    #     while self.t + time < len(self.target_trail) - 1 and time < dt:
-    #         # Calculate current and next position
-    #         current_pos = self.ant.pos
-    #         next_pos = self.target_trail[self.t + int(time) + 1]
-    #
-    #         # Calculate distance and angle to the next position
-    #         dx = next_pos[0] - current_pos[0]
-    #         dy = next_pos[1] - current_pos[1]
-    #         distance = math.sqrt(dx ** 2 + dy ** 2)
-    #         info['distance'] = distance
-    #         angle_to_target = math.atan2(dy, dx)
-    #         info['target_angle'] = angle_to_target
-    #
-    #         # Determine angle difference from current orientation
-    #         angle_diff = self._angle_difference(self.ant.theta, angle_to_target)
-    #         info['rotation'] = angle_diff
-    #
-    #         if distance > 0.05:
-    #             action[0] = 1
-    #
-    #         if angle_diff < 0:
-    #             action[2] = 1
-    #         elif angle_diff > 0:
-    #             action[3] = 1
-    #
-    #         time += 1
-    #
-    #     return action, info
-
-    # def _get_stepped_action(self, dt):
-    #     action = [0, 0, 0, 0]
-    #
-    #     if self.target_data is None or len(self.target_data['angle']) == 0:
-    #         self.target_data = {
-    #             'angle': [],
-    #             'distance': [],
-    #             'action': []
-    #         }
-    #         if self.t + dt < len(self.target_trail) - 1:
-    #             # Calculate current and next position
-    #             current_pos = self.ant.pos
-    #             next_pos = self.target_trail[self.t + int(dt)]
-    #
-    #             # Calculate distance and angle to the next position
-    #             dx = next_pos[0] - current_pos[0]
-    #             dy = next_pos[1] - current_pos[1]
-    #             distance = math.sqrt(dx ** 2 + dy ** 2)
-    #             self.target_data['distance'] = [distance / dt for _ in range(dt)]
-    #             angle_to_target = math.atan2(dy, dx)
-    #             self.target_data['angle'] = [angle_to_target for _ in range(dt)]
-    #
-    #             # Determine angle difference from current orientation
-    #             angle_diff = self._angle_difference(self.ant.theta, angle_to_target)
-    #
-    #             if distance > 0.05:
-    #                 action[0] = 1
-    #
-    #             if angle_diff < 0:
-    #                 action[2] = 1
-    #             elif angle_diff > 0:
-    #                 action[3] = 1
-    #
-    #         else:
-    #             self.target_data['distance'].append(None)
-    #             self.target_data['angle'].append(None)
-    #
-    #     target_data = {
-    #         'angle': self.target_data['angle'].pop(),
-    #         'distance': self.target_data['distance'].pop()
-    #     }
-    #
-    #     return action, target_data
-
     def step(self, actions):
         """
         Each step, take the given actions and return observations, rewards, terminations, truncations
@@ -1014,7 +913,7 @@ class AntColonyEnv(ParallelEnv):
             truncations = {a: False for a in self.agents}
 
         # Initialize reward value
-        rewards = {agent: self._reward_function(action) for agent, action in actions.items()}
+        rewards = {agent: self._reward_function(agent, action) for agent, action in actions.items()}
 
         # Additional information (if necessary)
         infos = {a: {
@@ -1253,7 +1152,7 @@ if __name__ == "__main__":
     total_reward = 0
     observations, infos = env.reset()
 
-    manual_mode = False
+    manual_mode = True
     manual_action = [0.0, 0.5, 0.0, 0.0]
 
     terminations = [False]
@@ -1269,8 +1168,8 @@ if __name__ == "__main__":
                         done = True
                     if event.key == pygame.K_r:
                         env.reset()
-                    if event.key == pygame.K_UP:    manual_action[0:4] = [1.0, 1.0, 0.0, 0.0]
-                    if event.key == pygame.K_DOWN:  manual_action[0:4] = [1.0, 0.0, 0.0, 0.0]
+                    if event.key == pygame.K_UP:    manual_action[0:4] = [0.5, 1.0, 0.0, 0.0]
+                    if event.key == pygame.K_DOWN:  manual_action[0:4] = [0.5, 0.0, 0.0, 0.0]
                     if event.key == pygame.K_LEFT:  manual_action[2], manual_action[3] = 0.7, 0.0
                     if event.key == pygame.K_RIGHT: manual_action[2], manual_action[3] = 0.0, 0.7
                 elif event.type == pygame.KEYUP:
