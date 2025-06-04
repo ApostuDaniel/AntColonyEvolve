@@ -21,7 +21,7 @@ formatter = logging.Formatter('%(asctime)s [%(levelname)s] In %(pathname)s:%(lin
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
-SIM_FPS = 30  # Simulation environment FPS
+SIM_FPS = 40  # Simulation environment FPS
 
 SCREEN_W = 1200
 SCREEN_H = 1200
@@ -33,7 +33,7 @@ arena_sizes = namedtuple('arena_sizes', ['arena_center', 'arena_radius'])
 # Global parameters for agent control
 TIMESTEP = 1. / SIM_FPS  # Not sure if this will be necessary, given the fixed FPS?
 # TIME_LIMIT = SIM_FPS * 60   # 60 seconds
-TIME_LIMIT = SIM_FPS * 30  # 30 seconds
+TIME_LIMIT = SIM_FPS * 10  # 30 seconds
 
 ANT_DIM = vec2d(5, 5)
 AGENT_SPEED = 30.00  # Maximum ant speed observed in data (pixels)

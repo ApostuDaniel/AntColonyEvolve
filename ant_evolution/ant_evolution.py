@@ -13,42 +13,54 @@ from pureples.es_hyperneat.es_hyperneat import ESNetwork
 VERSION = "S"
 VERSION_TEXT = "small" if VERSION == "S" else "medium" if VERSION == "M" else "large"
 
-# float_max = np.finfo(np.float32).max
-# float_min = np.finfo(np.float32).min
-# env_obs_spaces = {
-#     'r_norm': Box(0.0, 1.0),
-#     'theta_norm': Box(0.0, 1.0),
-#     'speed': Box(-AGENT_SPEED, AGENT_SPEED, (1,), np.float32),
-#     'theta': Box(0.0, 2 * math.pi),
-#     # 'theta_dot': Box(0.0, float_max),
-#     'vision_segments_wall_distances': Box(0.0, 1.0, (len(vision_segments),)),
-#     'vision_segments_food_distances': Box(0.0, 1.0, (len(vision_segments),)),
-#     'vision_segments_food_angles': Box(0.0, 2 * math.pi, (len(vision_segments),)),
-#     'density_areas': Box(0.0, 1.0, (len(vision_segments) * len(view_ranges),)),
-
-# @functools.lru_cache(maxsize=None)
-# def action_space(self, agent):
-#     return Box(0.0, 1.0, (4,), dtype=np.float32)
+# Original input coordinates based on diagram
+# INPUT_COORDINATES = [
+#     (0.0, 0.0), # r_norm
+#     (0.0, -0.05), # theta_norm
+#     (0.0, -0.1), # speed
+#     (0.0, 0.1), # theta
+#     (-0.95, 0.31), (-0.59, 0.81),(0, 1.0), (0.59, 0.81), (0.95, 0.31), #vision_segments_wall_distances
+#     (-0.92, 0.3), (-0.57, 0.78), (0, 0.97), (0.57, 0.78), (0.92, 0.3),  # vision_segments_food_distances
+#     (-0.31, 0.1), (-0.19, 0.26), (0, 0.33), (0.19, 0.26), (0.31, 0.1),  # vision_segments_food_angles
+#     (-0.8, 0.26), (-0.49, 0.68), (0, 0.82), (0.49, 0.68), (0.8, 0.26),  # density_area_far
+#     (-0.48, 0.15), (-0.3, 0.4), (0, 0.5), (0.3, 0.4), (0.48, 0.15),  # density_area_middle
+#     (-0.2, 0.06), (-0.12, 0.17), (0, 0.2), (0.12, 0.17), (0.2, 0.06),  # density_area_close
+# ]
 
 INPUT_COORDINATES = [
     (0.0, 0.0), # r_norm
-    (0.0, -0.05), # theta_norm
-    (0.0, -0.1), # speed
-    (0.0, 0.1), # theta
-    (-0.95, 0.31), (-0.59, 0.81),(0, 1.0), (0.59, 0.81), (0.95, 0.31), #vision_segments_wall_distances
-    (-0.92, 0.3), (-0.57, 0.78), (0, 0.97), (0.57, 0.78), (0.92, 0.3),  # vision_segments_food_distances
-    (-0.31, 0.1), (-0.19, 0.26), (0, 0.33), (0.19, 0.26), (0.31, 0.1),  # vision_segments_food_angles
-    (-0.8, 0.26), (-0.49, 0.68), (0, 0.82), (0.49, 0.68), (0.8, 0.26),  # density_area_far
-    (-0.48, 0.15), (-0.3, 0.4), (0, 0.5), (0.3, 0.4), (0.48, 0.15),  # density_area_middle
-    (-0.2, 0.06), (-0.12, 0.17), (0, 0.2), (0.12, 0.17), (0.2, 0.06),  # density_area_close
-
+    (0.0, 0.1), # theta_norm
+    (0.0, 0.2), # speed
+    (0.0, 3), # theta
+    (-1, 0.30), (-0.6, 0.8),(0, 1.0), (0.6, 0.8), (1, 0.30), #vision_segments_wall_distances
+    (-0.9, 0.3), (-0.5, 0.8), (0, 0.9), (0.5, 0.8), (0.9, 0.3),  # vision_segments_food_distances
+    (-0.30, 0.1), (-0.2, 0.3), (0, 0.3), (0.2, 0.3), (0.3, 0.1),  # vision_segments_food_angles
+    (-0.8, 0.25), (-0.5, 0.7), (0, 0.8), (0.5, 0.7), (0.8, 0.25),  # density_area_far
+    (-0.5, 0.15), (-0.3, 0.4), (0, 0.5), (0.3, 0.4), (0.5, 0.15),  # density_area_middle
+    (-0.2, 0.1), (-0.1, 0.15), (0, 0.2), (0.1, 0.15), (0.2, 0.1),  # density_area_close
 ]
+
+# coordinates that we try to allign parallel
+# INPUT_COORDINATES = [
+#     (0.0, 0.0), # r_norm
+#     (0.0, 0.1), # theta_norm
+#     (0.0, 0.2), # speed
+#     (0.0, 3), # theta
+#     (-1, 1), (-0.5, 1),(0, 1.0), (0.5, 1), (1, 1), #vision_segments_wall_distances
+#     (-1, 0.8), (-0.5, 0.8),(0, 0.8), (0.5, 0.8), (1, 0.8),  # vision_segments_food_distances
+#     (-1, 0.7), (-0.5, 0.7),(0, 0.7), (0.5, 0.7), (1, 0.7),  # vision_segments_food_angles
+#     (-0.9, 0.6), (-0.6, 0.6), (0, 0.6), (0.6, 0.6), (0.9, 0.6),  # density_area_far
+#     (-0.8, 0.5), (-0.4, 0.5), (0, 0.5), (0.4, 0.5), (0.8, 0.5),  # density_area_middle
+#     (-0.7, 0.4), (-0.35, 0.4), (0, 0.4), (0.35, 0.4), (0.7, 0.4),  # density_area_close
+# ]
+
+
 OUTPUT_COORDINATES = \
     [
-        (0, -0.15), # acceleration
-        (0., 0.15), # direction
-        (0.33, 0.0), # turn left
-        (-0.33, 0.0) #turn_right
+        (0, -0.5), # acceleration
+        (0., -0.3), # direction
+        (0.5, -0.5), # turn left
+        (-0.5, -0.5) #turn_right
     ]
 
 SUBSTRATE = Substrate(INPUT_COORDINATES, OUTPUT_COORDINATES)
@@ -108,12 +120,13 @@ def run_es(gens, env, max_steps, config, params, substrate, max_trials=100, outp
                 outputs = []
                 for i, network in enumerate(networks):
                     for _ in range(network.activations):
-                        output = nets[i].activate(observations[f"ant_{i}"])
+                        output = nets[i].activate(np.array(observations[f"ant_{i}"]))
                     outputs.append(output)
                 # outputs = [nets[i].activate(observations[i]) for i in range(len(networks)) for _ in range(networks[i].activations)]
 
 
                 actions =  {f"ant_{i}": o for i, o in enumerate(outputs)}
+                # actions = {f"ant_{i}": env.action_space(f"ant_{i}").sample() for i, o in enumerate(outputs)}
                 observations, rewards, terminations, truncations, infos = env.step(actions)
                 total_rewards = [total + rewards[f"ant_{i}"] for i, total in enumerate(total_rewards)]
                 terminations = [terminations[a] for a in terminations]
@@ -161,7 +174,10 @@ def run(gens, env, version):
 if __name__ == "__main__":
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.INFO)
+
     env = ant_arena.AntColonyEnv(50, 50, render_mode='human')
+    # env = ant_arena.AntColonyEnv(50, 50)
+
 
     # Run! Only relevant to look at the winner.
     WINNER = run(100, env, VERSION)[0]

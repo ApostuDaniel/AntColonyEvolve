@@ -8,9 +8,9 @@ reset_on_extinction   = False
 
 [DefaultGenome]
 # node activation options
-activation_default      = tanh
+activation_default      = sigmoid
 activation_mutate_rate  = 0.5
-activation_options      = gauss sin tanh
+activation_options      = gauss sin sigmoid abs
 
 # node aggregation options
 aggregation_default     = sum
