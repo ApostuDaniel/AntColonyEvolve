@@ -18,49 +18,48 @@ VERSION_TEXT = "small" if VERSION == "S" else "medium" if VERSION == "M" else "l
 #     (0.0, 0.0), # r_norm
 #     (0.0, -0.05), # theta_norm
 #     (0.0, -0.1), # speed
-#     (0.0, 0.1), # theta
-#     (-0.95, 0.31), (-0.59, 0.81),(0, 1.0), (0.59, 0.81), (0.95, 0.31), #vision_segments_wall_distances
-#     (-0.92, 0.3), (-0.57, 0.78), (0, 0.97), (0.57, 0.78), (0.92, 0.3),  # vision_segments_food_distances
-#     (-0.31, 0.1), (-0.19, 0.26), (0, 0.33), (0.19, 0.26), (0.31, 0.1),  # vision_segments_food_angles
-#     (-0.8, 0.26), (-0.49, 0.68), (0, 0.82), (0.49, 0.68), (0.8, 0.26),  # density_area_far
-#     (-0.48, 0.15), (-0.3, 0.4), (0, 0.5), (0.3, 0.4), (0.48, 0.15),  # density_area_middle
-#     (-0.2, 0.06), (-0.12, 0.17), (0, 0.2), (0.12, 0.17), (0.2, 0.06),  # density_area_close
+#     (0.0, -0.2), # theta
+#     (-0.95, -0.31), (-0.59, -0.81),(0, -1.0), (0.59, -0.81), (0.95, -0.31), #vision_segments_wall_distances
+#     (-0.92, -0.3), (-0.57, -0.78), (0, -0.97), (0.57, -0.78), (0.92, -0.3),  # vision_segments_food_distances
+#     (-0.31, -0.1), (-0.19, -0.26), (0, -0.33), (0.19, -0.26), (0.31, -0.1),  # vision_segments_food_angles
+#     (-0.2, -0.06), (-0.12, -0.17), (0, -0.2), (0.12, -0.17), (0.2, -0.06),  # density_area_close
+#     (-0.48, -0.15), (-0.3, -0.4), (0, -0.5), (0.3, -0.4), (0.48, -0.15),  # density_area_middle
+#     (-0.8, -0.26), (-0.49, -0.68), (0, -0.82), (0.49, -0.68), (0.8, -0.26),  # density_area_far
 # ]
 
 INPUT_COORDINATES = [
     (0.0, 0.0), # r_norm
-    (0.0, 0.1), # theta_norm
-    (0.0, 0.2), # speed
-    (0.0, 3), # theta
-    (-1, 0.30), (-0.6, 0.8),(0, 1.0), (0.6, 0.8), (1, 0.30), #vision_segments_wall_distances
-    (-0.9, 0.3), (-0.5, 0.8), (0, 0.9), (0.5, 0.8), (0.9, 0.3),  # vision_segments_food_distances
-    (-0.30, 0.1), (-0.2, 0.3), (0, 0.3), (0.2, 0.3), (0.3, 0.1),  # vision_segments_food_angles
-    (-0.8, 0.25), (-0.5, 0.7), (0, 0.8), (0.5, 0.7), (0.8, 0.25),  # density_area_far
-    (-0.5, 0.15), (-0.3, 0.4), (0, 0.5), (0.3, 0.4), (0.5, 0.15),  # density_area_middle
-    (-0.2, 0.1), (-0.1, 0.15), (0, 0.2), (0.1, 0.15), (0.2, 0.1),  # density_area_close
+    (0.0, -0.1), # theta_norm
+    (0.0, -0.2), # speed
+    (0.0, -0.3), # theta
+    (-1, -0.3), (-0.6, -0.8),(0, -1.0), (0.6, -0.8), (1, -0.3), #vision_segments_wall_distances
+    (-0.9, -0.3), (-0.5, -0.8), (0, -0.9), (0.5, -0.8), (0.9, -0.3),  # vision_segments_food_distances
+    (-0.30, -0.1), (-0.2, -0.3), (0, -0.3), (0.2, -0.3), (0.3, -0.1),  # vision_segments_food_angles
+    (-0.2, -0.1), (-0.1, -0.15), (0, -0.2), (0.1, -0.15), (0.2, -0.1),  # density_area_close
+    (-0.5, -0.15), (-0.3, -0.4), (0, -0.5), (0.3, -0.4), (0.5, -0.15),  # density_area_middle
+    (-0.8, -0.25), (-0.5, -0.7), (0, -0.8), (0.5, -0.7), (0.8, -0.25),  # density_area_far
 ]
 
 # coordinates that we try to allign parallel
 # INPUT_COORDINATES = [
-#     (0.0, 0.0), # r_norm
-#     (0.0, 0.1), # theta_norm
-#     (0.0, 0.2), # speed
-#     (0.0, 3), # theta
-#     (-1, 1), (-0.5, 1),(0, 1.0), (0.5, 1), (1, 1), #vision_segments_wall_distances
-#     (-1, 0.8), (-0.5, 0.8),(0, 0.8), (0.5, 0.8), (1, 0.8),  # vision_segments_food_distances
-#     (-1, 0.7), (-0.5, 0.7),(0, 0.7), (0.5, 0.7), (1, 0.7),  # vision_segments_food_angles
-#     (-0.9, 0.6), (-0.6, 0.6), (0, 0.6), (0.6, 0.6), (0.9, 0.6),  # density_area_far
-#     (-0.8, 0.5), (-0.4, 0.5), (0, 0.5), (0.4, 0.5), (0.8, 0.5),  # density_area_middle
-#     (-0.7, 0.4), (-0.35, 0.4), (0, 0.4), (0.35, 0.4), (0.7, 0.4),  # density_area_close
+#     (0.0, -0.0), # r_norm
+#     (0.0, -0.1), # theta_norm
+#     (0.0, -0.2), # speed
+#     (0.0, -0.3), # theta
+#     (-1, -1.), (-0.5, -1.),(0, -1.), (0.5, -1.), (1, -1.), #vision_segments_wall_distances
+#     (-1, -0.8), (-0.5, -0.8),(0, -0.8), (0.5, -0.8), (1, -0.8),  # vision_segments_food_distances
+#     (-1, -0.7), (-0.5, -0.7),(0, -0.7), (0.5, -0.7), (1, -0.7),  # vision_segments_food_angles
+#     (-0.7, -0.4), (-0.35, -0.4), (0, -0.4), (0.35, -0.4), (0.7, -0.4),  # density_area_close
+#     (-0.8, -0.5), (-0.4, -0.5), (0, -0.5), (0.4, -0.5), (0.8, -0.5),  # density_area_middle
+#     (-0.9, -0.6), (-0.6, -0.6), (0, -0.6), (0.6, -0.6), (0.9, -0.6),  # density_area_far
 # ]
-
 
 OUTPUT_COORDINATES = \
     [
-        (0, -0.5), # acceleration
-        (0., -0.3), # direction
-        (0.5, -0.5), # turn left
-        (-0.5, -0.5) #turn_right
+        (0, 0.5), # acceleration
+        (0., 0.3), # direction
+        (0.5, 0.5), # turn left
+        (-0.5, 0.5) #turn_right
     ]
 
 SUBSTRATE = Substrate(INPUT_COORDINATES, OUTPUT_COORDINATES)
@@ -74,7 +73,7 @@ def params(version):
             "variance_threshold": 0.03,
             "band_threshold": 0.3,
             "iteration_level": 1,
-            "division_threshold": 0.5,
+            "division_threshold": 0.3,
             "max_weight": 8.0,
             "activation": "sigmoid"}
 
@@ -99,8 +98,15 @@ def run_es(gens, env, max_steps, config, params, substrate, max_trials=100, outp
     Generic OpenAI Gym runner for ES-HyperNEAT.
     """
     trials = 1
-
+    pop_size = len(env.agents)
     def eval_fitness(genomes, config):
+
+        # we could modify neat/reproduction.py compute_spawn() function to limit spawn_amounts
+        # such that the sum of species spawn amount is not larger than the initial pop_size
+        # but this modification would be overwritten from the neat library when we update the conda development env
+        # as such we apply the limit here
+        for (_, g) in genomes: g.fitness = 0.
+        genomes = genomes[:pop_size]
 
         cppns = [neat.nn.FeedForwardNetwork.create(g, config) for _, g in genomes]
         networks = [ESNetwork(substrate, cppn, params) for cppn in cppns]
@@ -128,7 +134,7 @@ def run_es(gens, env, max_steps, config, params, substrate, max_trials=100, outp
                 actions =  {f"ant_{i}": o for i, o in enumerate(outputs)}
                 # actions = {f"ant_{i}": env.action_space(f"ant_{i}").sample() for i, o in enumerate(outputs)}
                 observations, rewards, terminations, truncations, infos = env.step(actions)
-                total_rewards = [total + rewards[f"ant_{i}"] for i, total in enumerate(total_rewards)]
+                total_rewards = [total + rewards[f"ant_{i}"] if any(actions[f"ant_{i}"]) else -10000 for i, total in enumerate(total_rewards)]
                 terminations = [terminations[a] for a in terminations]
                 truncations = [truncations[a] for a in truncations]
 
@@ -177,6 +183,7 @@ if __name__ == "__main__":
 
     env = ant_arena.AntColonyEnv(50, 50, render_mode='human')
     # env = ant_arena.AntColonyEnv(50, 50)
+    env.reset()
 
 
     # Run! Only relevant to look at the winner.
@@ -190,20 +197,4 @@ if __name__ == "__main__":
     draw_net(CPPN, filename=f"es_hyperneat_ant_evolution_{VERSION_TEXT}_cppn")
     with open(f'es_hyperneat_ant_evolution_{VERSION_TEXT}_cppn.pkl', 'wb') as output:
         pickle.dump(CPPN, output, pickle.HIGHEST_PROTOCOL)
-
-    # observations, infos = env.reset()
-    #
-    # terminations = [False]
-    # truncations = [False]
-    # done = False
-    # while env.agents and not any(terminations) and not any(truncations):
-    #     actions = {agent: env.action_space(agent).sample() for agent in env.agents}
-    #     if done is True:
-    #         break
-    #     observations, rewards, terminations, truncations, infos = env.step(actions)
-    #     terminations = [terminations[a] for a in terminations]
-    #     truncations = [truncations[a] for a in truncations]
-    #
-    # env.close()
-    # print('Cumulative score:', total_reward)
 
