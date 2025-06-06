@@ -461,12 +461,16 @@ class Ant():
     def _detect_nearby_food(self, food_sources):
         """
         Detects food sources within vision range and categorizes them into vision segments.
+        Marks them if they have come in contact with the ant.
 
         Parameters:
         - food_sources (list of tuples): The (x, y, quantity) positions of food sources and their quantity.
 
         Returns:
         - dict: Maps segment names to lists of food positions within that segment.
+
+         Assigns:
+            - collected_food int: food intersecting ants body
         """
         # Pre-calculate common values
         vision_range_squared = self.vision_range ** 2
@@ -487,11 +491,19 @@ class Ant():
 
         # Process each food
         pos_x, pos_y = self.pos.x, self.pos.y
-        for food_x, food_y, quantity in food_sources:
+        self.collected_food = 0
+        for i, (food_x, food_y, quantity, was_eaten) in enumerate(food_sources):
             # Use faster distance calculation without sqrt for initial check
             dx = food_x - pos_x
             dy = food_y - pos_y
             distance_squared = dx * dx + dy * dy
+            food_size = int(max(2, quantity * FOOD_SIZE_SCALING))
+            eating_range_squared = ((ANT_DIM.x + food_size) / 2) ** 2
+            if distance_squared <= eating_range_squared and was_eaten == False:
+                #Mark food as eaten
+                self.collected_food += quantity
+                food_sources[i] = (food_x, food_y, quantity, True)
+
             fitting_view_range_idx = self._get_fitting_vision_range_index(distance_squared, view_ranges_squared)
 
             if distance_squared <= vision_range_squared:
@@ -512,36 +524,6 @@ class Ant():
                         break
 
         return detected_food, density_areas
-
-    def collect_food(self, food_sources):
-        """
-            Accumulates food quantity for food sources which intersect the ant's body
-
-            Parameters:
-            - food_sources (list of tuples): The (x, y, quantity) positions of food sources and their quantity.
-
-            Returns:
-            - eaten_indices: list, indices for the food collected.
-
-            Assigns:
-            - collected_food int: food intersecting ants body
-        """
-        self.collected_food = 0
-        eaten_indices = []
-
-        pos_x, pos_y = self.pos.x, self.pos.y
-        for i, (food_x, food_y, quantity) in enumerate(food_sources):
-            # Use faster distance calculation without sqrt for initial check
-            dx = food_x - pos_x
-            dy = food_y - pos_y
-            distance_squared = dx * dx + dy * dy
-            food_size = int(max(2, quantity * FOOD_SIZE_SCALING))
-            eating_range_squared = ((ANT_DIM.x + food_size) / 2) ** 2
-            if distance_squared <= eating_range_squared:
-                eaten_indices.append(i)
-                self.collected_food += quantity
-
-        return eaten_indices
 
     def get_polar_position(self):
         """
@@ -853,7 +835,7 @@ class AntColonyEnv(ParallelEnv):
         def get_rand_food_params():
             x, y = rng.uniform(-max_food_draw_radius, max_food_draw_radius, size=2)
             quantity = int(rng.uniform(10, MAX_FOOD_QUANTITY))
-            return int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y), quantity
+            return int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y), quantity, False
 
         if replacement_indices is not None:
             for i in replacement_indices:
@@ -929,17 +911,14 @@ class AntColonyEnv(ParallelEnv):
         if self.render_mode == "human":
             self._render_frame
 
-        eaten_food = set()
+        eaten_food = [ i for i, (_, _, _,was_eaten) in enumerate(self.food_sources) if was_eaten]
+        self._respawn_food(list(eaten_food))
         for agent, action in actions.items():
-            eaten_indices = self.ants[agent].collect_food(self.food_sources)
-            eaten_food.update(eaten_indices)
             self.ants[agent].set_action(action)
-            # self.ant.set_action(auto_action, movement_info['distance'], self.target_angles[self.t][1])
             self.ants[agent].update()
 
         self.t += 1
 
-        self._respawn_food(list(eaten_food))
         # Get observations of other ants in the arena
         if self.food_sources is not None:
             observations = self.get_observations(self.food_sources)
