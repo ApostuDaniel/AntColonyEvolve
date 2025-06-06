@@ -36,7 +36,7 @@ TIMESTEP = 1. / SIM_FPS  # Not sure if this will be necessary, given the fixed F
 TIME_LIMIT = SIM_FPS * 10  # 30 seconds
 
 ANT_DIM = vec2d(5, 5)
-AGENT_SPEED = 30.00  # Maximum ant speed observed in data (pixels)
+AGENT_SPEED = 20.00  # Maximum ant speed observed in data (pixels)
 AGENT_ACCELERATION = 10.00
 TURN_RATE = 0.3575  # Maximum turning rate observed in data (radians)
 
@@ -268,7 +268,7 @@ class Ant():
         # areas delimited by vision segments and vision ranges (portion of a pie slice)
         self.density_areas = {}
 
-
+        self.collected_food = 0
         # Arena information
         self.arena_center = arena_center
         self.arena_radius = arena_radius
@@ -513,6 +513,35 @@ class Ant():
 
         return detected_food, density_areas
 
+    def collect_food(self, food_sources):
+        """
+            Accumulates food quantity for food sources which intersect the ant's body
+
+            Parameters:
+            - food_sources (list of tuples): The (x, y, quantity) positions of food sources and their quantity.
+
+            Returns:
+            - eaten_indices: list, indices for the food collected.
+
+            Assigns:
+            - collected_food int: food intersecting ants body
+        """
+        self.collected_food = 0
+        eaten_indices = []
+
+        pos_x, pos_y = self.pos.x, self.pos.y
+        for i, (food_x, food_y, quantity) in enumerate(food_sources):
+            # Use faster distance calculation without sqrt for initial check
+            dx = food_x - pos_x
+            dy = food_y - pos_y
+            distance_squared = dx * dx + dy * dy
+            food_size = int(max(2, quantity * FOOD_SIZE_SCALING))
+            eating_range_squared = ((ANT_DIM.x + food_size) / 2) ** 2
+            if distance_squared <= eating_range_squared:
+                eaten_indices.append(i)
+                self.collected_food += quantity
+
+        return eaten_indices
 
     def get_polar_position(self):
         """
@@ -797,12 +826,7 @@ class AntColonyEnv(ParallelEnv):
         """
         ant = self.ants[agent]
 
-        reward = 0.0
-
-        for segment_idx in range(1, 4):
-            reward += ant.density_areas[segment_idx][0]['food']
-
-        return reward
+        return ant.collected_food
 
     def get_observations(self, others=None):
         return {a: self.ants[a].get_obs(others) for a in self.agents}
@@ -821,6 +845,24 @@ class AntColonyEnv(ParallelEnv):
 
         self.window = None
         self.clock = None
+
+    def _respawn_food(self, replacement_indices=None):
+        rng = np.random.default_rng()
+        max_food_draw_radius = self.ant_arena.arena_radius * 0.80 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING) * 2
+
+        def get_rand_food_params():
+            x, y = rng.uniform(-max_food_draw_radius, max_food_draw_radius, size=2)
+            quantity = int(rng.uniform(10, MAX_FOOD_QUANTITY))
+            return int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y), quantity
+
+        if replacement_indices is not None:
+            for i in replacement_indices:
+                self.food_sources[i] = get_rand_food_params()
+        else:
+            self.food_sources = []
+            for _ in range(self.nr_of_food):
+                self.food_sources.append(get_rand_food_params())
+
 
     def reset(self, seed=None, options=None):
         self._destroy()
@@ -854,12 +896,7 @@ class AntColonyEnv(ParallelEnv):
                     self.ants[agent] = Ant((x, y))
                     break
 
-        self.food_sources = []
-        max_food_draw_radius = self.ant_arena.arena_radius * 0.80 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING) * 2
-        for _ in range(self.nr_of_food):
-            x, y = rng.uniform(-max_food_draw_radius, max_food_draw_radius, size=2)
-            quantity = int(rng.uniform(10, MAX_FOOD_QUANTITY))
-            self.food_sources.append((int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y), quantity))
+        self._respawn_food()
 
         if self.food_sources is not None:
             observations = self.get_observations(self.food_sources)
@@ -892,12 +929,17 @@ class AntColonyEnv(ParallelEnv):
         if self.render_mode == "human":
             self._render_frame
 
+        eaten_food = set()
         for agent, action in actions.items():
+            eaten_indices = self.ants[agent].collect_food(self.food_sources)
+            eaten_food.update(eaten_indices)
             self.ants[agent].set_action(action)
             # self.ant.set_action(auto_action, movement_info['distance'], self.target_angles[self.t][1])
             self.ants[agent].update()
 
         self.t += 1
+
+        self._respawn_food(list(eaten_food))
         # Get observations of other ants in the arena
         if self.food_sources is not None:
             observations = self.get_observations(self.food_sources)

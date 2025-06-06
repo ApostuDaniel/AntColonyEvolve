@@ -183,5 +183,4 @@ fabric.properties
 
 # idea folder, uncomment if you don't need it
 .idea
-/ant_colony_arena/aquarium.py
 /dev_tests

@@ -10,7 +10,7 @@ from pureples.shared.substrate import Substrate
 from pureples.es_hyperneat.es_hyperneat import ESNetwork
 
 # S, M or L; Small, Medium or Large (logic implemented as "Not 'S' or 'M' then Large").
-VERSION = "S"
+VERSION = "M"
 VERSION_TEXT = "small" if VERSION == "S" else "medium" if VERSION == "M" else "large"
 
 # Original input coordinates based on diagram
@@ -132,9 +132,8 @@ def run_es(gens, env, max_steps, config, params, substrate, max_trials=100, outp
 
 
                 actions =  {f"ant_{i}": o for i, o in enumerate(outputs)}
-                # actions = {f"ant_{i}": env.action_space(f"ant_{i}").sample() for i, o in enumerate(outputs)}
                 observations, rewards, terminations, truncations, infos = env.step(actions)
-                total_rewards = [total + rewards[f"ant_{i}"] if any(actions[f"ant_{i}"]) else -10000 for i, total in enumerate(total_rewards)]
+                total_rewards = [total + rewards[f"ant_{i}"] for i, total in enumerate(total_rewards)]
                 terminations = [terminations[a] for a in terminations]
                 truncations = [truncations[a] for a in truncations]
 
@@ -181,13 +180,13 @@ if __name__ == "__main__":
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.INFO)
 
-    env = ant_arena.AntColonyEnv(50, 50, render_mode='human')
-    # env = ant_arena.AntColonyEnv(50, 50)
+    # env = ant_arena.AntColonyEnv(50, 30, render_mode='human')
+    env = ant_arena.AntColonyEnv(50, 30)
     env.reset()
 
 
     # Run! Only relevant to look at the winner.
-    WINNER = run(100, env, VERSION)[0]
+    WINNER = run(200, env, VERSION)[0]
 
     # Save CPPN if wished reused and draw it + winner to file.
     CPPN = neat.nn.FeedForwardNetwork.create(WINNER, CONFIG)
