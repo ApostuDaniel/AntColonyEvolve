@@ -269,6 +269,7 @@ class Ant():
         self.density_areas = {}
 
         self.collected_food = 0
+        self.total_food = 0
         # Arena information
         self.arena_center = arena_center
         self.arena_radius = arena_radius
@@ -523,6 +524,8 @@ class Ant():
                         density_areas[segment_idx][fitting_view_range_idx]['food'] += quantity
                         break
 
+        self.total_food += self.collected_food
+
         return detected_food, density_areas
 
     def get_polar_position(self):
@@ -618,10 +621,10 @@ class Ant():
 
         # Include the food density for each food detection area
 
-        for segment_idx in range(len(vision_segments)):
-            # result.append(density_areas[segment_idx][0]['food'])
-            for range_idx in range(len(view_ranges)):
-                result.append(density_areas[segment_idx][range_idx]['food'])
+        # for segment_idx in range(len(vision_segments)):
+        #     # result.append(density_areas[segment_idx][0]['food'])
+        #     for range_idx in range(len(view_ranges)):
+        #         result.append(density_areas[segment_idx][range_idx]['food'])
 
         return result
 
@@ -1037,6 +1040,15 @@ class AntColonyEnv(ParallelEnv):
                 logger.error("Cannot draw ant with provided coordinates.")
 
         if DRAW_ANT_VISION:
+            # Draw a glow around the best performing ant
+            best_ant = max(self.agents, key=lambda agent: self.ants[agent].total_food)
+            best_ant = self.ants[best_ant]
+            pygame.draw.circle(
+                canvas,
+                (225, 225, 140),
+                (int(best_ant.pos.x), int(best_ant.pos.y)),
+                MAX_VISION_RANGE
+            )
 
             font = pygame.font.SysFont('Arial', 9)
             for segment_idx, ((angle_range_start, angle_range_end), colour, _) in enumerate(vision_segments):

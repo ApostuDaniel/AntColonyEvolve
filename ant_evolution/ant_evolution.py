@@ -35,9 +35,9 @@ INPUT_COORDINATES = [
     (-1, -0.3), (-0.6, -0.8),(0, -1.0), (0.6, -0.8), (1, -0.3), #vision_segments_wall_distances
     (-0.9, -0.3), (-0.5, -0.8), (0, -0.9), (0.5, -0.8), (0.9, -0.3),  # vision_segments_food_distances
     (-0.30, -0.1), (-0.2, -0.3), (0, -0.3), (0.2, -0.3), (0.3, -0.1),  # vision_segments_food_angles
-    (-0.2, -0.1), (-0.1, -0.15), (0, -0.2), (0.1, -0.15), (0.2, -0.1),  # density_area_close
-    (-0.5, -0.15), (-0.3, -0.4), (0, -0.5), (0.3, -0.4), (0.5, -0.15),  # density_area_middle
-    (-0.8, -0.25), (-0.5, -0.7), (0, -0.8), (0.5, -0.7), (0.8, -0.25),  # density_area_far
+    # (-0.2, -0.1), (-0.1, -0.15), (0, -0.2), (0.1, -0.15), (0.2, -0.1),  # density_area_close
+    # (-0.5, -0.15), (-0.3, -0.4), (0, -0.5), (0.3, -0.4), (0.5, -0.15),  # density_area_middle
+    # (-0.8, -0.25), (-0.5, -0.7), (0, -0.8), (0.5, -0.7), (0.8, -0.25),  # density_area_far
 ]
 
 # coordinates that we try to allign parallel
@@ -98,15 +98,12 @@ def run_es(gens, env, max_steps, config, params, substrate, max_trials=100, outp
     Generic OpenAI Gym runner for ES-HyperNEAT.
     """
     trials = 1
-    pop_size = len(env.agents)
+    # pop_size = len(env.agents)
     def eval_fitness(genomes, config):
 
-        # we could modify neat/reproduction.py compute_spawn() function to limit spawn_amounts
-        # such that the sum of species spawn amount is not larger than the initial pop_size
-        # but this modification would be overwritten from the neat library when we update the conda development env
-        # as such we apply the limit here
-        for (_, g) in genomes: g.fitness = 0.
-        genomes = genomes[:pop_size]
+        # Modified neat/reproduction.py compute_spawn() function to limit spawn_amounts to pop size
+        # for (_, g) in genomes: g.fitness = 0.
+        # genomes = genomes[:pop_size]
 
         cppns = [neat.nn.FeedForwardNetwork.create(g, config) for _, g in genomes]
         networks = [ESNetwork(substrate, cppn, params) for cppn in cppns]
@@ -180,13 +177,13 @@ if __name__ == "__main__":
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.INFO)
 
-    # env = ant_arena.AntColonyEnv(50, 30, render_mode='human')
-    env = ant_arena.AntColonyEnv(50, 30)
+    env = ant_arena.AntColonyEnv(50, 50, render_mode='human')
+    # env = ant_arena.AntColonyEnv(50, 50)
     env.reset()
 
 
     # Run! Only relevant to look at the winner.
-    WINNER = run(200, env, VERSION)[0]
+    WINNER = run(100, env, VERSION)[0]
 
     # Save CPPN if wished reused and draw it + winner to file.
     CPPN = neat.nn.FeedForwardNetwork.create(WINNER, CONFIG)
@@ -197,3 +194,21 @@ if __name__ == "__main__":
     with open(f'es_hyperneat_ant_evolution_{VERSION_TEXT}_cppn.pkl', 'wb') as output:
         pickle.dump(CPPN, output, pickle.HIGHEST_PROTOCOL)
 
+# Added before return in neat/reproduction.py compute_spawn() function
+# # If there are more spawns than the inital population size, randomly remove based on roulete wheel selection
+# total_spawn = sum(spawn_amounts)
+# if total_spawn > pop_size:
+#     roulete_intervals = list(adjusted_fitness)
+#     for i in range(1, len(spawn_amounts)):
+#         roulete_intervals[i] = roulete_intervals[i - 1] + spawn_amounts[i]
+#
+# while total_spawn > pop_size:
+#     random_af_pick = random.random()
+#     last_step = 0
+#     for i, roulete_interval in enumerate(roulete_intervals):
+#         if last_step <= random_af_pick < roulete_interval[i]:
+#             if spawn_amounts[i] > min_species_size:
+#                 spawn_amounts[i] -= 1
+#                 total_spawn -= 1
+#             break;
+#         last_step = roulete_interval[i]
