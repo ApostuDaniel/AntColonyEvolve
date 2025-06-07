@@ -1,16 +1,21 @@
 import logging
+import os
 import pickle
+from datetime import datetime
 
 import numpy as np
+from neat import StdOutReporter
+
 import ant_colony_arena.ant_colony_arena as ant_arena
 import neat
+from utils.neat_plot_reporter import PlotReporter
 
 from pureples.shared.visualize import draw_net
 from pureples.shared.substrate import Substrate
 from pureples.es_hyperneat.es_hyperneat import ESNetwork
 
 # S, M or L; Small, Medium or Large (logic implemented as "Not 'S' or 'M' then Large").
-VERSION = "M"
+VERSION = "S"
 VERSION_TEXT = "small" if VERSION == "S" else "medium" if VERSION == "M" else "large"
 
 # Original input coordinates based on diagram
@@ -82,18 +87,21 @@ CONFIG = neat.config.Config(neat.genome.DefaultGenome, neat.reproduction.Default
                             neat.species.DefaultSpeciesSet, neat.stagnation.DefaultStagnation,
                             './config_cppn_ant_evolution')
 
-def ini_pop(state, stats, config, output):
+def ini_pop(state, stats, config, output, output_dir=None):
     """
     Initialize population attaching statistics reporter.
     """
     pop = neat.population.Population(config, state)
     if output:
-        pop.add_reporter(neat.reporting.StdOutReporter(True))
+        if output_dir:
+            pop.add_reporter(PlotReporter(True, 20, output_dir))
+        else:
+            pop.add_reporter(StdOutReporter(True))
     pop.add_reporter(stats)
     return pop
 
 
-def run_es(gens, env, max_steps, config, params, substrate, max_trials=100, output=True):
+def run_es(gens, env, max_steps, config, params, substrate, max_trials=100, output=True, output_dir=None):
     """
     Generic OpenAI Gym runner for ES-HyperNEAT.
     """
@@ -142,7 +150,7 @@ def run_es(gens, env, max_steps, config, params, substrate, max_trials=100, outp
 
     # Create population and train the network. Return winner of network running 100 episodes.
     stats_one = neat.statistics.StatisticsReporter()
-    pop = ini_pop(None, stats_one, config, output)
+    pop = ini_pop(None, stats_one, config, output, output_dir)
     winner_one = pop.run(eval_fitness, gens)
 
     # stats_ten = neat.statistics.StatisticsReporter()
@@ -162,13 +170,13 @@ def run_es(gens, env, max_steps, config, params, substrate, max_trials=100, outp
 
     return winner_one, (stats_one,)
 
-def run(gens, env, version):
+def run(gens, env, version, output_dir=None):
     """
     Run the ant evolution task using the Gym environment
     Returns the winning genome and the statistics of the run.
     """
     winner, stats = run_es(gens, env, 200, CONFIG, params(
-        version), SUBSTRATE, max_trials=0)
+        version), SUBSTRATE, max_trials=0, output_dir=output_dir)
     print(f"es_hyperneat_ant_evolution_{VERSION_TEXT} done")
     return winner, stats
 
@@ -177,21 +185,25 @@ if __name__ == "__main__":
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.INFO)
 
-    env = ant_arena.AntColonyEnv(50, 50, render_mode='human')
-    # env = ant_arena.AntColonyEnv(50, 50)
+    # env = ant_arena.AntColonyEnv(50, 50, render_mode='human')
+    env = ant_arena.AntColonyEnv(50, 50)
     env.reset()
 
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+    current_run_directory = f"alg_runs/run_{timestamp}"
 
     # Run! Only relevant to look at the winner.
-    WINNER = run(100, env, VERSION)[0]
+    WINNER = run(20, env, VERSION, os.path.join(current_run_directory, "plots"))[0]
 
+    os.makedirs(current_run_directory, exist_ok=True)
     # Save CPPN if wished reused and draw it + winner to file.
     CPPN = neat.nn.FeedForwardNetwork.create(WINNER, CONFIG)
     NETWORK = ESNetwork(SUBSTRATE, CPPN, params(VERSION))
     NET = NETWORK.create_phenotype_network(
-        filename=f"es_hyperneat_ant_evolution_{VERSION_TEXT}_winner")
-    draw_net(CPPN, filename=f"es_hyperneat_ant_evolution_{VERSION_TEXT}_cppn")
-    with open(f'es_hyperneat_ant_evolution_{VERSION_TEXT}_cppn.pkl', 'wb') as output:
+        filename=os.path.join(current_run_directory, f"es_hyperneat_ant_evolution_{VERSION_TEXT}_winner"))
+    draw_net(CPPN, filename=os.path.join(current_run_directory, f"es_hyperneat_ant_evolution_{VERSION_TEXT}_cppn"))
+    with open(os.path.join(current_run_directory, f'es_hyperneat_ant_evolution_{VERSION_TEXT}_cppn.pkl'), 'wb') as output:
         pickle.dump(CPPN, output, pickle.HIGHEST_PROTOCOL)
 
 # Added before return in neat/reproduction.py compute_spawn() function
