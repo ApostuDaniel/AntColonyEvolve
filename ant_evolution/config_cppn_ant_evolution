@@ -10,7 +10,7 @@ reset_on_extinction   = False
 # node activation options
 activation_default      = tanh
 activation_mutate_rate  = 0.5
-activation_options      = tanh gauss sin sigmoid abs
+activation_options      = tanh gauss sin sigmoid abs identity
 
 # node aggregation options
 aggregation_default     = sum
@@ -38,7 +38,7 @@ conn_delete_prob        = 0.15
 enabled_default         = True
 enabled_mutate_rate     = 0.01
 
-feed_forward            = True
+feed_forward            = False
 initial_connection      = full
 
 # node add/remove rates

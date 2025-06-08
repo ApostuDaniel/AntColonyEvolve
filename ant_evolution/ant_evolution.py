@@ -32,6 +32,7 @@ VERSION_TEXT = "small" if VERSION == "S" else "medium" if VERSION == "M" else "l
 #     (-0.8, -0.26), (-0.49, -0.68), (0, -0.82), (0.49, -0.68), (0.8, -0.26),  # density_area_far
 # ]
 
+# Favourite
 INPUT_COORDINATES = [
     (0.0, 0.0), # r_norm
     (0.0, -0.1), # theta_norm
@@ -39,7 +40,7 @@ INPUT_COORDINATES = [
     (0.0, -0.3), # theta
     (-1, -0.3), (-0.6, -0.8),(0, -1.0), (0.6, -0.8), (1, -0.3), #vision_segments_wall_distances
     (-0.9, -0.3), (-0.5, -0.8), (0, -0.9), (0.5, -0.8), (0.9, -0.3),  # vision_segments_food_distances
-    (-0.30, -0.1), (-0.2, -0.3), (0, -0.3), (0.2, -0.3), (0.3, -0.1),  # vision_segments_food_angles
+    # (-0.30, -0.1), (-0.2, -0.3), (0, -0.3), (0.2, -0.3), (0.3, -0.1),  # vision_segments_food_angles
     # (-0.2, -0.1), (-0.1, -0.15), (0, -0.2), (0.1, -0.15), (0.2, -0.1),  # density_area_close
     # (-0.5, -0.15), (-0.3, -0.4), (0, -0.5), (0.3, -0.4), (0.5, -0.15),  # density_area_middle
     # (-0.8, -0.25), (-0.5, -0.7), (0, -0.8), (0.5, -0.7), (0.8, -0.25),  # density_area_far
@@ -62,9 +63,8 @@ INPUT_COORDINATES = [
 OUTPUT_COORDINATES = \
     [
         (0, 0.5), # acceleration
-        (0., 0.3), # direction
-        (0.5, 0.5), # turn left
-        (-0.5, 0.5) #turn_right
+        (-0.5, 0.5), # turn left
+        (0.5, 0.5) #turn_right
     ]
 
 SUBSTRATE = Substrate(INPUT_COORDINATES, OUTPUT_COORDINATES)
@@ -73,14 +73,16 @@ def params(version):
     """
     ES-HyperNEAT specific parameters.
     """
-    return {"initial_depth": 0 if version == "S" else 1 if version == "M" else 2,
-            "max_depth": 1 if version == "S" else 2 if version == "M" else 3,
-            "variance_threshold": 0.03,
-            "band_threshold": 0.3,
-            "iteration_level": 1,
-            "division_threshold": 0.3,
-            "max_weight": 8.0,
-            "activation": "sigmoid"}
+    return {
+        "initial_depth": 0 if version == "S" else 1 if version == "M" else 2,
+        "max_depth": 1 if version == "S" else 2 if version == "M" else 3,
+        "variance_threshold": 0.01,
+        "band_threshold": 0.03,
+        "iteration_level": 4,
+        "division_threshold": 0.05,
+        "max_weight": 8.0,
+        "activation": "tanh"
+    }
 
 # Config for CPPN.
 CONFIG = neat.config.Config(neat.genome.DefaultGenome, neat.reproduction.DefaultReproduction,
@@ -185,16 +187,18 @@ if __name__ == "__main__":
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.INFO)
 
-    # env = ant_arena.AntColonyEnv(50, 50, render_mode='human')
-    env = ant_arena.AntColonyEnv(50, 50)
+    # env = ant_arena.AntColonyEnv(50, 30, render_mode='human')
+    env = ant_arena.AntColonyEnv(50, 30)
     env.reset()
+
+    run_specificity="tanh_actions"
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-    current_run_directory = f"alg_runs/run_{timestamp}"
+    current_run_directory = f"alg_runs/run_{timestamp}_{run_specificity}"
 
     # Run! Only relevant to look at the winner.
-    WINNER = run(20, env, VERSION, os.path.join(current_run_directory, "plots"))[0]
+    WINNER = run(100, env, VERSION, os.path.join(current_run_directory, "plots"))[0]
 
     os.makedirs(current_run_directory, exist_ok=True)
     # Save CPPN if wished reused and draw it + winner to file.

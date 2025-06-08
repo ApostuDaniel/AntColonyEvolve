@@ -277,15 +277,15 @@ class Ant():
     def _compute_distance_to_wall(self, angle):
         """
         Compute the normalized distance from the ant's current position to the arena wall
-        along a specified angle, scaled between 1 (very close) and 0 (beyond VISION_RANGE).
+        along a specified angle, scaled between 0 (very close) and 1 (beyond VISION_RANGE).
 
         Parameters:
         - angle (float): The angle (in radians) along which to compute the distance.
 
         Returns:
-        - float: Normalized distance to the wall (1.0 to 0.0).
-                Returns 1.0 if the wall is at zero distance,
-                0.0 if the wall is beyond VISION_RANGE.
+        - float: Normalized distance to the wall (0.0 to 1.0).
+                Returns 0.0 if the wall is at zero distance,
+                1.0 if the wall is beyond VISION_RANGE.
         """
         x0, y0 = self.pos.x, self.pos.y
         Cx, Cy = self.arena_center
@@ -302,7 +302,7 @@ class Ant():
         discriminant = b ** 2 - c
         if discriminant < 0:
             # No intersection; should not happen if the ant is inside the arena
-            return 0.0  # Treat as beyond VISION_RANGE
+            return 1.0  # Treat as beyond VISION_RANGE
 
         sqrt_discriminant = math.sqrt(discriminant)
         t1 = -b + sqrt_discriminant
@@ -313,15 +313,15 @@ class Ant():
 
         if t < 0:
             # Both intersections are behind the ant
-            return 0.0  # Treat as beyond VISION_RANGE
+            return 1.0  # Treat as beyond VISION_RANGE
 
-        # Scale the distance: 1.0 (very close) to 0.0 (beyond VISION_RANGE)
+        # Scale the distance: 0.0 (very close) to 1.0 (beyond VISION_RANGE)
         if t <= 0:
-            scaled_distance = 1.0  # Extremely close to the wall
+            scaled_distance = 0.0  # Extremely close to the wall
         elif t >= self.vision_range:
-            scaled_distance = 0.0  # Wall is beyond VISION_RANGE
+            scaled_distance = 1.0  # Wall is beyond VISION_RANGE
         else:
-            scaled_distance = 1.0 - (t / self.vision_range)
+            scaled_distance = t / self.vision_range
 
         return scaled_distance
 
@@ -384,15 +384,12 @@ class Ant():
             central_angle = ((self.theta + sum(angle_range) / 2) % (2 * math.pi))
 
             # Initialize scaled distances
-            food_distance_scaled = 0.0
-            food_angle = 0
+            food_distance_scaled = 1.0 # outside of vision range
+            food_angle = -1 # outside allowed angle range(0, 2 * math.pi), to show nothing is detected
 
             # Get wall distance
             # compute_distance_to_wall already returns the distance scaled
-            # but in the opposite way, 1.0 means very close and 0.0 means very far
-
-            raw_wall_distance = self._compute_distance_to_wall(central_angle)
-            wall_distance_scaled = 1.0 - raw_wall_distance
+            wall_distance_scaled = self._compute_distance_to_wall(central_angle)
 
             # Get ant distance
             food_in_segment = detected_food.get(idx, [])
@@ -405,9 +402,8 @@ class Ant():
                     default=None
                 )
 
-
                 if raw_food_distance is not None and raw_food_distance <= self.vision_range:
-                    food_distance_scaled = 1.0 - (raw_food_distance / self.vision_range)
+                    food_distance_scaled = raw_food_distance / self.vision_range
 
             # Store all scores at once
             self.wall_distances[idx] = wall_distance_scaled
@@ -562,18 +558,30 @@ class Ant():
             self.pos = vec2d(desired_pos[0], desired_pos[1])
 
     def set_action(self, action):
-        acceleration, direction, turn_left, turn_right = action
+        acceleration, turn_left, turn_right = action
 
         self.desired_speed = self.speed
         # self.desired_turn_speed = 0
 
-        # Accelerate if direction > 0.5 and decelerate otherwise, emulates FORWARD and BACKWARD movement
-        if direction < 0.5:
-            self.desired_speed = max(-AGENT_SPEED, self.desired_speed - acceleration * AGENT_ACCELERATION)
-        elif direction > 0.5:
-            self.desired_speed = min(AGENT_SPEED, self.desired_speed + acceleration * AGENT_ACCELERATION)
+        # # Accelerate if direction > 0.5 and decelerate otherwise, emulates FORWARD and BACKWARD movement
+        # if direction < 0.5:
+        #     self.desired_speed = max(-AGENT_SPEED, self.desired_speed - acceleration * AGENT_ACCELERATION)
+        # elif direction > 0.5:
+        #     self.desired_speed = min(AGENT_SPEED, self.desired_speed + acceleration * AGENT_ACCELERATION)
 
-        rotation = -TURN_RATE * turn_left if turn_left > turn_right else TURN_RATE * turn_right if turn_right > turn_left else 0
+        self.desired_speed += acceleration * AGENT_ACCELERATION
+        self.desired_speed = np.clip(self.desired_speed, -AGENT_SPEED, AGENT_SPEED)
+
+        # Another movement variant(without acceleration)
+        # if direction < 0.5:
+        #     self.desired_speed = -(AGENT_SPEED * acceleration)
+        # elif direction > 0.5:
+        #     self.desired_speed = AGENT_SPEED * acceleration
+
+        # rotation = -TURN_RATE * turn_left if turn_left > turn_right else TURN_RATE * turn_right if turn_right > turn_left else 0
+
+        # If turn_left is negative, it means turn right
+        rotation = (turn_right - turn_left) * TURN_RATE
         self.theta += rotation
 
         # If no turn, reset the turn timers
@@ -581,7 +589,7 @@ class Ant():
             self.turning_time_left = 0.0
             self.turning_time_right = 0.0
 
-        return [acceleration, direction, turn_left, turn_right]
+        return [acceleration, turn_left, turn_right]
 
     def get_obs(self, others=None):
         """
@@ -616,8 +624,8 @@ class Ant():
         result.extend(self.wall_distances)
         # add nearest food distances per vision segment
         result.extend(self.nearest_food_distances)
-        # add angle to nearest food per vision segment
-        result.extend(self.nearest_food_angles)
+        # # add angle to nearest food per vision segment
+        # result.extend(self.nearest_food_angles)
 
         # Include the food density for each food detection area
 
@@ -693,11 +701,10 @@ class AntColonyEnv(ParallelEnv):
             'theta_norm': Box(0.0, 1.0),
             'speed': Box(-AGENT_SPEED, AGENT_SPEED, (1,), np.float32),
             'theta': Box(0.0, 2 * math.pi),
-            # 'theta_dot': Box(0.0, float_max),
             'vision_segments_wall_distances': Box(0.0, 1.0, (len(vision_segments),)),
             'vision_segments_food_distances': Box(0.0, 1.0,(len(vision_segments),)),
-            'vision_segments_food_angles': Box(0.0, 2 * math.pi, (len(vision_segments),)),
-            'density_areas': Box(0.0, 1.0,(len(vision_segments) * len(view_ranges),)),
+            # 'vision_segments_food_angles': Box(-1.0, 2 * math.pi, (len(vision_segments),)),
+            # 'density_areas': Box(0.0, 1.0,(len(vision_segments) * len(view_ranges),)),
             # used when testing just the closest density sensors
             # 'density_areas': Box(0.0, 1.0, (len(vision_segments),)),
         }
@@ -708,7 +715,7 @@ class AntColonyEnv(ParallelEnv):
     # If your spaces change over time, remove this line (disable caching).
     @functools.lru_cache(maxsize=None)
     def action_space(self, agent):
-        return Box(0.0, 1.0, (4,), dtype=np.float32)
+        return Box(-1.0, 1.0, (3,), dtype=np.float32)
 
     def seed(self, seed=None):
         return seeding.np_random(seed)
@@ -990,6 +997,16 @@ class AntColonyEnv(ParallelEnv):
             int(self.ant_arena.arena_radius)  # Radius
         )
 
+        # Draw a glow around the best performing ant
+        best_ant = max(self.agents, key=lambda agent: self.ants[agent].total_food)
+        best_ant = self.ants[best_ant]
+        pygame.draw.circle(
+            canvas,
+            (225, 225, 140),
+            (int(best_ant.pos.x), int(best_ant.pos.y)),
+            MAX_VISION_RANGE
+        )
+
         ### DRAW TRAILS FIRST
 
         # Draw ant trail
@@ -1040,16 +1057,6 @@ class AntColonyEnv(ParallelEnv):
                 logger.error("Cannot draw ant with provided coordinates.")
 
         if DRAW_ANT_VISION:
-            # Draw a glow around the best performing ant
-            best_ant = max(self.agents, key=lambda agent: self.ants[agent].total_food)
-            best_ant = self.ants[best_ant]
-            pygame.draw.circle(
-                canvas,
-                (225, 225, 140),
-                (int(best_ant.pos.x), int(best_ant.pos.y)),
-                MAX_VISION_RANGE
-            )
-
             font = pygame.font.SysFont('Arial', 9)
             for segment_idx, ((angle_range_start, angle_range_end), colour, _) in enumerate(vision_segments):
                 for agent in self.agents:
@@ -1189,7 +1196,7 @@ if __name__ == "__main__":
     observations, infos = env.reset()
 
     manual_mode = True
-    manual_action = [0.0, 0.5, 0.0, 0.0]
+    manual_action = [0.0, 0.0, 0.0]
 
     terminations = [False]
     truncations = [False]
@@ -1204,15 +1211,15 @@ if __name__ == "__main__":
                         done = True
                     if event.key == pygame.K_r:
                         env.reset()
-                    if event.key == pygame.K_UP:    manual_action[0:4] = [0.5, 1.0, 0.0, 0.0]
-                    if event.key == pygame.K_DOWN:  manual_action[0:4] = [0.5, 0.0, 0.0, 0.0]
-                    if event.key == pygame.K_LEFT:  manual_action[2], manual_action[3] = 0.7, 0.0
-                    if event.key == pygame.K_RIGHT: manual_action[2], manual_action[3] = 0.0, 0.7
+                    if event.key == pygame.K_UP:    manual_action[0:3] = [0.5, 0.0, 0.0]
+                    if event.key == pygame.K_DOWN:  manual_action[0:3] = [-0.5, 0.0, 0.0]
+                    if event.key == pygame.K_LEFT:  manual_action[1], manual_action[2] = 0.7, 0.0
+                    if event.key == pygame.K_RIGHT: manual_action[1], manual_action[2] = 0.0, 0.7
                 elif event.type == pygame.KEYUP:
-                    if event.key == pygame.K_UP:    manual_action[0:2] = [0.0, 1.0]
-                    if event.key == pygame.K_DOWN:  manual_action[0:2] = [0.0, 0.0]
-                    if event.key == pygame.K_LEFT:  manual_action[2] = 0.0
-                    if event.key == pygame.K_RIGHT:  manual_action[3] = 0.0
+                    if event.key == pygame.K_UP:    manual_action[0] = 0.0
+                    if event.key == pygame.K_DOWN:  manual_action[0] = 0.0
+                    if event.key == pygame.K_LEFT:  manual_action[1] = 0.0
+                    if event.key == pygame.K_RIGHT:  manual_action[2] = 0.0
 
             actions = {agent: manual_action for agent in env.agents}
         else:
