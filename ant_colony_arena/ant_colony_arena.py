@@ -40,9 +40,9 @@ AGENT_SPEED = 20.00  # Maximum ant speed observed in data (pixels)
 AGENT_ACCELERATION = 10.00
 TURN_RATE = 0.3575  # Maximum turning rate observed in data (radians)
 
-MAX_VISION_RANGE = 60
-MIDDLE_VISION_RANGE = 40
-MIN_VISION_RANGE = 20
+MAX_VISION_RANGE = 120
+MIDDLE_VISION_RANGE = 80
+MIN_VISION_RANGE = 40
 
 MAX_FOOD_QUANTITY = 50
 FOOD_SIZE_SCALING = 0.5
@@ -1138,13 +1138,13 @@ class AntColonyEnv(ParallelEnv):
             ant = self.ants[agent]
             for segment_idx, distance in ant.nearest_food_distances.items():
                 angle = ant.nearest_food_angles[segment_idx]
-                if distance is not None and distance != 0.0:
+                if distance is not None and distance != 1.0:
                     # Calculate the central angle of the segment
                     angle_range, segment_color, _ = vision_segments[segment_idx]
 
                     # Calculate end point based on nearest ant distance
-                    end_x = int(ant.pos.x + math.cos(angle) * (1 - distance) * MAX_VISION_RANGE)
-                    end_y = int(ant.pos.y + math.sin(angle) * (1 - distance) * MAX_VISION_RANGE)
+                    end_x = int(ant.pos.x + math.cos(angle) * distance * MAX_VISION_RANGE)
+                    end_y = int(ant.pos.y + math.sin(angle) * distance * MAX_VISION_RANGE)
 
                     # Draw a line from the ant to the nearest ant
                     pygame.draw.line(
