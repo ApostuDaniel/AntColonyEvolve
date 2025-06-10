@@ -38,11 +38,11 @@ TIME_LIMIT = SIM_FPS * 10  # 30 seconds
 ANT_DIM = vec2d(5, 5)
 AGENT_SPEED = 20.00  # Maximum ant speed observed in data (pixels)
 AGENT_ACCELERATION = 10.00
-TURN_RATE = 0.3575  # Maximum turning rate observed in data (radians)
+TURN_RATE = 2 * 0.3575  # Maximum turning rate observed in data (radians)
 
-MAX_VISION_RANGE = 120
-MIDDLE_VISION_RANGE = 80
-MIN_VISION_RANGE = 40
+MAX_VISION_RANGE = 90
+MIDDLE_VISION_RANGE = 60
+MIN_VISION_RANGE = 30
 
 MAX_FOOD_QUANTITY = 50
 FOOD_SIZE_SCALING = 0.5
@@ -273,6 +273,7 @@ class Ant():
         # Arena information
         self.arena_center = arena_center
         self.arena_radius = arena_radius
+        self.wall_collision = False
 
     def _compute_distance_to_wall(self, angle):
         """
@@ -520,8 +521,6 @@ class Ant():
                         density_areas[segment_idx][fitting_view_range_idx]['food'] += quantity
                         break
 
-        self.total_food += self.collected_food
-
         return detected_food, density_areas
 
     def get_polar_position(self):
@@ -553,8 +552,9 @@ class Ant():
         direction = np.array([np.cos(self.theta), np.sin(self.theta)]) * self.desired_speed
         # Set the desired position based on direction and speed relative to timestep
         desired_pos = np.add(np.array(self.pos), direction)
-        # If leaving the cirle, push agent back into circle.
-        if is_rectangle_in_circle(desired_pos[0], desired_pos[1], self.arena_center, self.arena_radius):
+        # If leaving the circle, push agent back into circle.
+        self.wall_collision = not is_rectangle_in_circle(desired_pos[0], desired_pos[1], self.arena_center, self.arena_radius)
+        if not self.wall_collision:
             self.pos = vec2d(desired_pos[0], desired_pos[1])
 
     def set_action(self, action):
@@ -617,7 +617,6 @@ class Ant():
             theta_norm,  # Normalized angular position
             self.speed,  # Current speed
             self.theta,  # Current orientation
-            # self.theta_dot,  # Angular velocity
         ]
 
         # add scaled nearest wall distances per vision segment
@@ -649,6 +648,16 @@ class Ant():
 
         # self._turn()
         self._move()
+
+
+def speed_punishment_eq(speed):
+    """
+    Exponential speed punishment
+    :param speed: agents current abs speed
+    :return: how much the reward should diminish
+    """
+    base = 2 ** (1/AGENT_SPEED)
+    return -((base ** int(speed)) - base)
 
 
 class AntColonyEnv(ParallelEnv):
@@ -817,8 +826,10 @@ class AntColonyEnv(ParallelEnv):
         Calculate the reward of the ant based on whether their closest view range detects food
         """
         ant = self.ants[agent]
+        reward = ant.collected_food - int(ant.wall_collision)
+        ant.total_food += reward
 
-        return ant.collected_food
+        return reward
 
     def get_observations(self, others=None):
         return {a: self.ants[a].get_obs(others) for a in self.agents}
@@ -844,7 +855,7 @@ class AntColonyEnv(ParallelEnv):
 
         def get_rand_food_params():
             x, y = rng.uniform(-max_food_draw_radius, max_food_draw_radius, size=2)
-            quantity = int(rng.uniform(10, MAX_FOOD_QUANTITY))
+            quantity = int(rng.uniform(MAX_FOOD_QUANTITY - 10, MAX_FOOD_QUANTITY))
             return int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y), quantity, False
 
         if replacement_indices is not None:
@@ -884,8 +895,9 @@ class AntColonyEnv(ParallelEnv):
             while True:
                 x, y = rng.uniform(-max_ant_draw_radius, max_ant_draw_radius, size=2)
                 x, y = (int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y))
+                theta = rng.uniform(0.0, 2 * math.pi)
                 if is_rectangle_in_circle(x, y, self.ant_arena.arena_center, self.ant_arena.arena_radius):
-                    self.ants[agent] = Ant((x, y))
+                    self.ants[agent] = Ant((x, y), theta)
                     break
 
         self._respawn_food()

@@ -32,33 +32,33 @@ VERSION_TEXT = "small" if VERSION == "S" else "medium" if VERSION == "M" else "l
 #     (-0.8, -0.26), (-0.49, -0.68), (0, -0.82), (0.49, -0.68), (0.8, -0.26),  # density_area_far
 # ]
 
-# Favourite
+# # Favourite
+# INPUT_COORDINATES = [
+#     (0.0, 0.0), # r_norm
+#     (0.0, -0.1), # theta_norm
+#     (0.0, -0.2), # speed
+#     (0.0, -0.3), # theta
+#     (-1, -0.3), (-0.6, -0.8),(0, -1.0), (0.6, -0.8), (1, -0.3), #vision_segments_wall_distances
+#     (-0.9, -0.3), (-0.5, -0.8), (0, -0.9), (0.5, -0.8), (0.9, -0.3),  # vision_segments_food_distances
+#     # (-0.30, -0.1), (-0.2, -0.3), (0, -0.3), (0.2, -0.3), (0.3, -0.1),  # vision_segments_food_angles
+#     # (-0.2, -0.1), (-0.1, -0.15), (0, -0.2), (0.1, -0.15), (0.2, -0.1),  # density_area_close
+#     # (-0.5, -0.15), (-0.3, -0.4), (0, -0.5), (0.3, -0.4), (0.5, -0.15),  # density_area_middle
+#     # (-0.8, -0.25), (-0.5, -0.7), (0, -0.8), (0.5, -0.7), (0.8, -0.25),  # density_area_far
+# ]
+
+#coordinates that we try to allign parallel
 INPUT_COORDINATES = [
     (0.0, 0.0), # r_norm
     (0.0, -0.1), # theta_norm
     (0.0, -0.2), # speed
     (0.0, -0.3), # theta
-    (-1, -0.3), (-0.6, -0.8),(0, -1.0), (0.6, -0.8), (1, -0.3), #vision_segments_wall_distances
-    (-0.9, -0.3), (-0.5, -0.8), (0, -0.9), (0.5, -0.8), (0.9, -0.3),  # vision_segments_food_distances
-    # (-0.30, -0.1), (-0.2, -0.3), (0, -0.3), (0.2, -0.3), (0.3, -0.1),  # vision_segments_food_angles
-    # (-0.2, -0.1), (-0.1, -0.15), (0, -0.2), (0.1, -0.15), (0.2, -0.1),  # density_area_close
-    # (-0.5, -0.15), (-0.3, -0.4), (0, -0.5), (0.3, -0.4), (0.5, -0.15),  # density_area_middle
-    # (-0.8, -0.25), (-0.5, -0.7), (0, -0.8), (0.5, -0.7), (0.8, -0.25),  # density_area_far
+    (-1, -1.), (-0.5, -1.),(0, -1.), (0.5, -1.), (1, -1.), #vision_segments_wall_distances
+    (-1, -0.8), (-0.5, -0.8),(0, -0.8), (0.5, -0.8), (1, -0.8),  # vision_segments_food_distances
+    # (-1, -0.7), (-0.5, -0.7),(0, -0.7), (0.5, -0.7), (1, -0.7),  # vision_segments_food_angles
+    # (-0.7, -0.4), (-0.35, -0.4), (0, -0.4), (0.35, -0.4), (0.7, -0.4),  # density_area_close
+    # (-0.8, -0.5), (-0.4, -0.5), (0, -0.5), (0.4, -0.5), (0.8, -0.5),  # density_area_middle
+    # (-0.9, -0.6), (-0.6, -0.6), (0, -0.6), (0.6, -0.6), (0.9, -0.6),  # density_area_far
 ]
-
-# coordinates that we try to allign parallel
-# INPUT_COORDINATES = [
-#     (0.0, -0.0), # r_norm
-#     (0.0, -0.1), # theta_norm
-#     (0.0, -0.2), # speed
-#     (0.0, -0.3), # theta
-#     (-1, -1.), (-0.5, -1.),(0, -1.), (0.5, -1.), (1, -1.), #vision_segments_wall_distances
-#     (-1, -0.8), (-0.5, -0.8),(0, -0.8), (0.5, -0.8), (1, -0.8),  # vision_segments_food_distances
-#     (-1, -0.7), (-0.5, -0.7),(0, -0.7), (0.5, -0.7), (1, -0.7),  # vision_segments_food_angles
-#     (-0.7, -0.4), (-0.35, -0.4), (0, -0.4), (0.35, -0.4), (0.7, -0.4),  # density_area_close
-#     (-0.8, -0.5), (-0.4, -0.5), (0, -0.5), (0.4, -0.5), (0.8, -0.5),  # density_area_middle
-#     (-0.9, -0.6), (-0.6, -0.6), (0, -0.6), (0.6, -0.6), (0.9, -0.6),  # density_area_far
-# ]
 
 OUTPUT_COORDINATES = \
     [
@@ -76,10 +76,10 @@ def params(version):
     return {
         "initial_depth": 0 if version == "S" else 1 if version == "M" else 2,
         "max_depth": 1 if version == "S" else 2 if version == "M" else 3,
-        "variance_threshold": 0.01,
-        "band_threshold": 0.03,
-        "iteration_level": 4,
-        "division_threshold": 0.05,
+        "variance_threshold": 0.03,
+        "band_threshold": 0.3,
+        "iteration_level": 1,
+        "division_threshold": 0.03,
         "max_weight": 8.0,
         "activation": "tanh"
     }
@@ -107,7 +107,7 @@ def run_es(gens, env, max_steps, config, params, substrate, max_trials=100, outp
     """
     Generic OpenAI Gym runner for ES-HyperNEAT.
     """
-    trials = 1
+    trials = 3
     # pop_size = len(env.agents)
     def eval_fitness(genomes, config):
 
@@ -187,18 +187,18 @@ if __name__ == "__main__":
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.INFO)
 
-    # env = ant_arena.AntColonyEnv(50, 30, render_mode='human')
-    env = ant_arena.AntColonyEnv(50, 30)
+    # env = ant_arena.AntColonyEnv(50, 50, render_mode='human')
+    env = ant_arena.AntColonyEnv(50, 50)
     env.reset()
 
-    run_specificity="tanh_actions"
+    run_specificity="es_hyperneat_parameters_fixed"
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     current_run_directory = f"alg_runs/run_{timestamp}_{run_specificity}"
 
     # Run! Only relevant to look at the winner.
-    WINNER = run(100, env, VERSION, os.path.join(current_run_directory, "plots"))[0]
+    WINNER = run(60, env, VERSION, os.path.join(current_run_directory, "plots"))[0]
 
     os.makedirs(current_run_directory, exist_ok=True)
     # Save CPPN if wished reused and draw it + winner to file.
