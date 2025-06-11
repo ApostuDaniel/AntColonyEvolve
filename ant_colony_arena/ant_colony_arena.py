@@ -40,6 +40,8 @@ AGENT_SPEED = 20.00  # Maximum ant speed observed in data (pixels)
 AGENT_ACCELERATION = 10.00
 TURN_RATE = 2 * 0.3575  # Maximum turning rate observed in data (radians)
 
+SPEED_PENALTY_BASE = 1.5 ** (1 / AGENT_SPEED)
+
 MAX_VISION_RANGE = 90
 MIDDLE_VISION_RANGE = 60
 MIN_VISION_RANGE = 30
@@ -613,18 +615,18 @@ class Ant():
 
         # Initialize the observation vector with basic state information
         result = [
-            r_norm,  # Normalized radial position
-            theta_norm,  # Normalized angular position
+            # r_norm,  # Normalized radial position
+            # theta_norm,  # Normalized angular position
             self.speed,  # Current speed
             self.theta,  # Current orientation
         ]
 
         # add scaled nearest wall distances per vision segment
-        result.extend(self.wall_distances)
+        result.extend(self.wall_distances.values())
         # add nearest food distances per vision segment
-        result.extend(self.nearest_food_distances)
+        result.extend(self.nearest_food_distances.values())
         # # add angle to nearest food per vision segment
-        # result.extend(self.nearest_food_angles)
+        # result.extend(self.nearest_food_angles.values())
 
         # Include the food density for each food detection area
 
@@ -650,14 +652,13 @@ class Ant():
         self._move()
 
 
-def speed_punishment_eq(speed):
+def speed_penalty_eq(speed):
     """
     Exponential speed punishment
     :param speed: agents current abs speed
     :return: how much the reward should diminish
     """
-    base = 2 ** (1/AGENT_SPEED)
-    return -((base ** int(speed)) - base)
+    return (SPEED_PENALTY_BASE ** int(speed)) - 1
 
 
 class AntColonyEnv(ParallelEnv):
@@ -706,12 +707,12 @@ class AntColonyEnv(ParallelEnv):
         float_max = np.finfo(np.float32).max
         float_min = np.finfo(np.float32).min
         env_obs_spaces = {
-            'r_norm': Box(0.0,1.0),
-            'theta_norm': Box(0.0, 1.0),
+            # 'r_norm': Box(0.0,1.0),
+            # 'theta_norm': Box(0.0, 1.0),
             'speed': Box(-AGENT_SPEED, AGENT_SPEED, (1,), np.float32),
-            'theta': Box(0.0, 2 * math.pi),
-            'vision_segments_wall_distances': Box(0.0, 1.0, (len(vision_segments),)),
-            'vision_segments_food_distances': Box(0.0, 1.0,(len(vision_segments),)),
+            'theta': Box(0.0, 2 * math.pi, (1,), np.float32),
+            'vision_segments_wall_distances': Box(0.0, 1.0, (len(vision_segments), np.float32)),
+            'vision_segments_food_distances': Box(0.0, 1.0,(len(vision_segments), np.float32)),
             # 'vision_segments_food_angles': Box(-1.0, 2 * math.pi, (len(vision_segments),)),
             # 'density_areas': Box(0.0, 1.0,(len(vision_segments) * len(view_ranges),)),
             # used when testing just the closest density sensors
@@ -826,7 +827,7 @@ class AntColonyEnv(ParallelEnv):
         Calculate the reward of the ant based on whether their closest view range detects food
         """
         ant = self.ants[agent]
-        reward = ant.collected_food - int(ant.wall_collision)
+        reward = ant.collected_food - int(ant.wall_collision) - speed_penalty_eq(ant.speed)
         ant.total_food += reward
 
         return reward
