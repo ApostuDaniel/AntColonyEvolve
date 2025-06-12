@@ -79,7 +79,7 @@ def params(version):
         "variance_threshold": 0.03,
         "band_threshold": 0.3,
         "iteration_level": 1,
-        "division_threshold": 0.03,
+        "division_threshold": 0.5,
         "max_weight": 8.0,
         "activation": "tanh"
     }
@@ -112,8 +112,6 @@ def run_es(gens, env, max_steps, config, params, substrate, max_trials=100, outp
     def eval_fitness(genomes, config):
 
         # Modified neat/reproduction.py compute_spawn() function to limit spawn_amounts to pop size
-        # for (_, g) in genomes: g.fitness = 0.
-        # genomes = genomes[:pop_size]
 
         cppns = [neat.nn.FeedForwardNetwork.create(g, config) for _, g in genomes]
         networks = [ESNetwork(substrate, cppn, params) for cppn in cppns]
@@ -198,7 +196,7 @@ if __name__ == "__main__":
     current_run_directory = f"alg_runs/run_{timestamp}_{run_specificity}"
 
     # Run! Only relevant to look at the winner.
-    WINNER = run(60, env, VERSION, os.path.join(current_run_directory, "plots"))[0]
+    WINNER = run(150, env, VERSION, os.path.join(current_run_directory, "plots"))[0]
 
     os.makedirs(current_run_directory, exist_ok=True)
     # Save CPPN if wished reused and draw it + winner to file.

@@ -615,16 +615,16 @@ class Ant():
 
         # Initialize the observation vector with basic state information
         result = [
-            # r_norm,  # Normalized radial position
-            # theta_norm,  # Normalized angular position
-            self.speed,  # Current speed
+            r_norm,  # Normalized radial position
+            theta_norm,  # Normalized angular position
+            self.speed / AGENT_SPEED,  # Current speed
             self.theta,  # Current orientation
         ]
 
         # add scaled nearest wall distances per vision segment
-        result.extend(self.wall_distances.values())
+        result.extend([self.wall_distances[i] for i in range(len(self.wall_distances))])
         # add nearest food distances per vision segment
-        result.extend(self.nearest_food_distances.values())
+        result.extend([self.nearest_food_distances[i]  for i in range(len(self.nearest_food_distances))])
         # # add angle to nearest food per vision segment
         # result.extend(self.nearest_food_angles.values())
 
@@ -707,8 +707,8 @@ class AntColonyEnv(ParallelEnv):
         float_max = np.finfo(np.float32).max
         float_min = np.finfo(np.float32).min
         env_obs_spaces = {
-            # 'r_norm': Box(0.0,1.0),
-            # 'theta_norm': Box(0.0, 1.0),
+            'r_norm': Box(0.0,1.0),
+            'theta_norm': Box(-1.0, 1.0),
             'speed': Box(-AGENT_SPEED, AGENT_SPEED, (1,), np.float32),
             'theta': Box(0.0, 2 * math.pi, (1,), np.float32),
             'vision_segments_wall_distances': Box(0.0, 1.0, (len(vision_segments), np.float32)),
