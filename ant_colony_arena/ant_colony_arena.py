@@ -3,7 +3,12 @@ import functools
 import logging
 import sys, math
 from collections import namedtuple
-from pickle import FALSE
+
+import warnings
+warnings.filterwarnings("ignore",
+                        message="pkg_resources is deprecated as an API",
+                        category=UserWarning,
+                        module="pygame\\.pkgdata")
 
 import numpy as np
 import pygame
