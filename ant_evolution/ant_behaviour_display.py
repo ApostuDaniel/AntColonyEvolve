@@ -22,7 +22,7 @@ INPUT_COORDINATES = [
     (0.0, -0.3), # theta
     (-1, -1.), (-0.5, -1.),(0, -1.), (0.5, -1.), (1, -1.), #vision_segments_wall_distances
     (-1, -0.8), (-0.5, -0.8),(0, -0.8), (0.5, -0.8), (1, -0.8),  # vision_segments_food_distances
-    # (-1, -0.7), (-0.5, -0.7),(0, -0.7), (0.5, -0.7), (1, -0.7),  # vision_segments_food_angles
+    (-1, -0.7), (-0.5, -0.7),(0, -0.7), (0.5, -0.7), (1, -0.7),  # vision_segments_food_angles
     # (-0.7, -0.4), (-0.35, -0.4), (0, -0.4), (0.35, -0.4), (0.7, -0.4),  # density_area_close
     # (-0.8, -0.5), (-0.4, -0.5), (0, -0.5), (0.4, -0.5), (0.8, -0.5),  # density_area_middle
     # (-0.9, -0.6), (-0.6, -0.6), (0, -0.6), (0.6, -0.6), (0.9, -0.6),  # density_area_far
@@ -38,10 +38,10 @@ OUTPUT_COORDINATES = \
 SUBSTRATE = Substrate(INPUT_COORDINATES, OUTPUT_COORDINATES)
 
 if __name__ == "__main__":
-    env = ant_arena.AntColonyEnv(5, 50, render_mode='human')
+    env = ant_arena.AntColonyEnv(1, 50, render_mode='human')
     env.reset()
 
-    best_agent_file="./alg_runs/run_2025-06-12_01-27-58_es_hyperneat_parameters_fixed/es_hyperneat_ant_evolution_small_cppn.pkl"
+    best_agent_file="./alg_runs/run_2025-06-12_22-31-08_es_hyperneat_parameters_fixed/es_hyperneat_ant_evolution_medium_cppn.pkl"
     CPPN = []
     with open(best_agent_file, 'rb') as file:
         CPPN = pickle.load(file)

@@ -626,7 +626,7 @@ class Ant():
         # add nearest food distances per vision segment
         result.extend([self.nearest_food_distances[i]  for i in range(len(self.nearest_food_distances))])
         # # add angle to nearest food per vision segment
-        # result.extend(self.nearest_food_angles.values())
+        result.extend([self.nearest_food_angles[i]  for i in range(len(self.nearest_food_angles))])
 
         # Include the food density for each food detection area
 
@@ -713,7 +713,7 @@ class AntColonyEnv(ParallelEnv):
             'theta': Box(0.0, 2 * math.pi, (1,), np.float32),
             'vision_segments_wall_distances': Box(0.0, 1.0, (len(vision_segments), np.float32)),
             'vision_segments_food_distances': Box(0.0, 1.0,(len(vision_segments), np.float32)),
-            # 'vision_segments_food_angles': Box(-1.0, 2 * math.pi, (len(vision_segments),)),
+            'vision_segments_food_angles': Box(-1.0, 2 * math.pi, (len(vision_segments),)),
             # 'density_areas': Box(0.0, 1.0,(len(vision_segments) * len(view_ranges),)),
             # used when testing just the closest density sensors
             # 'density_areas': Box(0.0, 1.0, (len(vision_segments),)),

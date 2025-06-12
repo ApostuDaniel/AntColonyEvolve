@@ -2,6 +2,7 @@ import logging
 import os
 import pickle
 from datetime import datetime
+from pickle import FALSE
 
 import numpy as np
 from neat import StdOutReporter
@@ -14,8 +15,12 @@ from pureples.shared.visualize import draw_net
 from pureples.shared.substrate import Substrate
 from pureples.es_hyperneat.es_hyperneat import ESNetwork
 
+import concurrent.futures
+import multiprocessing
+from functools import partial
+
 # S, M or L; Small, Medium or Large (logic implemented as "Not 'S' or 'M' then Large").
-VERSION = "S"
+VERSION = "M"
 VERSION_TEXT = "small" if VERSION == "S" else "medium" if VERSION == "M" else "large"
 
 # Original input coordinates based on diagram
@@ -54,7 +59,7 @@ INPUT_COORDINATES = [
     (0.0, -0.3), # theta
     (-1, -1.), (-0.5, -1.),(0, -1.), (0.5, -1.), (1, -1.), #vision_segments_wall_distances
     (-1, -0.8), (-0.5, -0.8),(0, -0.8), (0.5, -0.8), (1, -0.8),  # vision_segments_food_distances
-    # (-1, -0.7), (-0.5, -0.7),(0, -0.7), (0.5, -0.7), (1, -0.7),  # vision_segments_food_angles
+    (-1, -0.7), (-0.5, -0.7),(0, -0.7), (0.5, -0.7), (1, -0.7),  # vision_segments_food_angles
     # (-0.7, -0.4), (-0.35, -0.4), (0, -0.4), (0.35, -0.4), (0.7, -0.4),  # density_area_close
     # (-0.8, -0.5), (-0.4, -0.5), (0, -0.5), (0.4, -0.5), (0.8, -0.5),  # density_area_middle
     # (-0.9, -0.6), (-0.6, -0.6), (0, -0.6), (0.6, -0.6), (0.9, -0.6),  # density_area_far
@@ -102,13 +107,63 @@ def ini_pop(state, stats, config, output, output_dir=None):
     pop.add_reporter(stats)
     return pop
 
+def make_ant_env():
+    # env = ant_arena.AntColonyEnv(50, 50, render_mode='human')
+    env = ant_arena.AntColonyEnv(50, 50)
+    env.reset()
+    return env
 
-def run_es(gens, env, max_steps, config, params, substrate, max_trials=100, output=True, output_dir=None):
+
+def _run_one_trial(nets, networks, env):
+    """
+    Helper function to run a single trial using a pre-created environment and networks.
+
+    Args:
+        env: Pre-created environment instance
+        nets: Pre-built phenotype networks
+        networks: Pre-built ESNetwork configurations
+    """
+    # Reset network states
+    for net in nets:
+        net.reset()
+
+    observations, infos = env.reset()
+    terminations = {}
+    truncations = {}
+    total_rewards = [0] * len(networks)
+
+    while env.agents and not (any(terminations.values()) or any(truncations.values())):
+
+        outputs = []
+        for i, network in enumerate(networks):
+            agent_id = f"ant_{i}"
+            if agent_id in env.agents:
+                obs = observations[agent_id]
+                # Multiple activations if configured
+                for _ in range(network.activations):
+                    output = nets[i].activate(np.array(obs))
+                outputs.append((agent_id, output))
+
+        actions = dict(outputs)
+        observations, rewards, terminations, truncations, infos = env.step(actions)
+
+        for i in range(len(networks)):
+            agent_id = f"ant_{i}"
+            if agent_id in rewards:
+                total_rewards[i] += rewards[agent_id]
+
+
+    return total_rewards
+
+
+def run_es(gens, env_fun, trials, max_steps, config, params, substrate, paralel_trials=False, max_trials=100, output=True, output_dir=None):
     """
     Generic OpenAI Gym runner for ES-HyperNEAT.
     """
-    trials = 3
-    # pop_size = len(env.agents)
+    # Pre-create environments for all trials
+    envs = [env_fun() for _ in range(trials)]
+    if trials == 1: env = envs[0]
+
     def eval_fitness(genomes, config):
 
         # Modified neat/reproduction.py compute_spawn() function to limit spawn_amounts to pop size
@@ -119,64 +174,61 @@ def run_es(gens, env, max_steps, config, params, substrate, max_trials=100, outp
 
         fitnesses = [[] for _ in genomes]
         for _ in range(trials):
-            observations, infos = env.reset()
-            terminations = [False]
-            truncations = [False]
-
-            for net in nets: net.reset()
-
-            total_rewards = [0 for _ in genomes]
-
-            while env.agents and not any(terminations) and not any(truncations):
-                outputs = []
-                for i, network in enumerate(networks):
-                    for _ in range(network.activations):
-                        output = nets[i].activate(np.array(observations[f"ant_{i}"]))
-                    outputs.append(output)
-                # outputs = [nets[i].activate(observations[i]) for i in range(len(networks)) for _ in range(networks[i].activations)]
-
-
-                actions =  {f"ant_{i}": o for i, o in enumerate(outputs)}
-                observations, rewards, terminations, truncations, infos = env.step(actions)
-                total_rewards = [total + rewards[f"ant_{i}"] for i, total in enumerate(total_rewards)]
-                terminations = [terminations[a] for a in terminations]
-                truncations = [truncations[a] for a in truncations]
-
+            total_rewards = _run_one_trial(nets, networks, env)
             for i in range(len(total_rewards)):
                 fitnesses[i].append(total_rewards[i])
 
         for i, (_, g) in enumerate(genomes):
             g.fitness = np.array(fitnesses[i]).mean()
 
+    def eval_fitness_parallel(genomes, config):
+        # Build all networks once per generation
+        cppns = [neat.nn.FeedForwardNetwork.create(g, config) for _, g in genomes]
+        networks = [ESNetwork(substrate, cppn, params) for cppn in cppns]
+        nets = [network.create_phenotype_network() for network in networks]
+
+
+        # Prepare trial runner
+        trial_runner = partial(
+            _run_one_trial,
+            nets,
+            networks
+        )
+
+        # Run trials in parallel
+        with concurrent.futures.ProcessPoolExecutor() as executor:
+            # Map each environment to a trial
+            futures = [executor.submit(trial_runner, current_env) for current_env in envs]
+            results = [f.result() for f in concurrent.futures.as_completed(futures)]
+
+        # Calculate average fitness
+        fitness_matrix = np.array(results)
+        avg_fitness = fitness_matrix.mean(axis=0)
+
+        for i, (_, g) in enumerate(genomes):
+            g.fitness = avg_fitness[i]
+
     # Create population and train the network. Return winner of network running 100 episodes.
     stats_one = neat.statistics.StatisticsReporter()
     pop = ini_pop(None, stats_one, config, output, output_dir)
-    winner_one = pop.run(eval_fitness, gens)
 
-    # stats_ten = neat.statistics.StatisticsReporter()
-    # pop = ini_pop((pop.population, pop.species, 0), stats_ten, config, output)
-    # trials = 10
-    # winner_ten = pop.run(eval_fitness, gens)
-    #
-    # if max_trials == 0:
-    #     return winner_ten, (stats_one, stats_ten)
-    #
-    # stats_hundred = neat.statistics.StatisticsReporter()
-    # pop = ini_pop((pop.population, pop.species, 0),
-    #               stats_hundred, config, output)
-    # trials = max_trials
-    # winner_hundred = pop.run(eval_fitness, gens)
-    env.close()
+    if trials > 1 and paralel_trials:
+        winner_one = pop.run(eval_fitness_parallel, gens)
+    else:
+        winner_one = pop.run(eval_fitness, gens)
+
+    for used_env in envs:
+        used_env.close()
 
     return winner_one, (stats_one,)
 
-def run(gens, env, version, output_dir=None):
+def run(gens, env_fun, trials, version, parallel_trials=False, output_dir=None):
     """
     Run the ant evolution task using the Gym environment
     Returns the winning genome and the statistics of the run.
     """
-    winner, stats = run_es(gens, env, 200, CONFIG, params(
-        version), SUBSTRATE, max_trials=0, output_dir=output_dir)
+    winner, stats = run_es(gens, env_fun, trials, 200, CONFIG, params(
+        version), SUBSTRATE, paralel_trials=parallel_trials, max_trials=0, output_dir=output_dir)
     print(f"es_hyperneat_ant_evolution_{VERSION_TEXT} done")
     return winner, stats
 
@@ -185,10 +237,6 @@ if __name__ == "__main__":
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.INFO)
 
-    # env = ant_arena.AntColonyEnv(50, 50, render_mode='human')
-    env = ant_arena.AntColonyEnv(50, 50)
-    env.reset()
-
     run_specificity="es_hyperneat_parameters_fixed"
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -196,7 +244,7 @@ if __name__ == "__main__":
     current_run_directory = f"alg_runs/run_{timestamp}_{run_specificity}"
 
     # Run! Only relevant to look at the winner.
-    WINNER = run(150, env, VERSION, os.path.join(current_run_directory, "plots"))[0]
+    WINNER = run(300, make_ant_env, 3, VERSION, True, os.path.join(current_run_directory, "plots"))[0]
 
     os.makedirs(current_run_directory, exist_ok=True)
     # Save CPPN if wished reused and draw it + winner to file.
