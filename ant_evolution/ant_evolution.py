@@ -167,7 +167,7 @@ def run_es(gens, env_fun, trials, max_steps, config, params, substrate, paralel_
     def eval_fitness(genomes, config):
 
         # Modified neat/reproduction.py compute_spawn() function to limit spawn_amounts to pop size
-
+        env = envs[0]
         cppns = [neat.nn.FeedForwardNetwork.create(g, config) for _, g in genomes]
         networks = [ESNetwork(substrate, cppn, params) for cppn in cppns]
         nets = [network.create_phenotype_network() for network in networks]
