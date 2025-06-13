@@ -9,6 +9,8 @@ from neat import StdOutReporter
 
 import ant_colony_arena.ant_colony_arena as ant_arena
 import neat
+
+from ant_colony_arena.ant_colony_arena import vision_segments
 from utils.neat_plot_reporter import PlotReporter
 
 from pureples.shared.visualize import draw_net
@@ -20,7 +22,7 @@ import multiprocessing
 from functools import partial
 
 # S, M or L; Small, Medium or Large (logic implemented as "Not 'S' or 'M' then Large").
-VERSION = "M"
+VERSION = "S"
 VERSION_TEXT = "small" if VERSION == "S" else "medium" if VERSION == "M" else "large"
 
 # Original input coordinates based on diagram
@@ -57,13 +59,19 @@ INPUT_COORDINATES = [
     (0.0, -0.1), # theta_norm
     (0.0, -0.2), # speed
     (0.0, -0.3), # theta
-    (-1, -1.), (-0.5, -1.),(0, -1.), (0.5, -1.), (1, -1.), #vision_segments_wall_distances
-    (-1, -0.8), (-0.5, -0.8),(0, -0.8), (0.5, -0.8), (1, -0.8),  # vision_segments_food_distances
-    (-1, -0.7), (-0.5, -0.7),(0, -0.7), (0.5, -0.7), (1, -0.7),  # vision_segments_food_angles
+    # (-1, -1.), (-0.5, -1.),(0, -1.), (0.5, -1.), (1, -1.), #vision_segments_wall_distances
+    # (-1, -0.8), (-0.5, -0.8),(0, -0.8), (0.5, -0.8), (1, -0.8),  # vision_segments_food_distances
+    # (-1, -0.7), (-0.5, -0.7),(0, -0.7), (0.5, -0.7), (1, -0.7),  # vision_segments_food_angles
     # (-0.7, -0.4), (-0.35, -0.4), (0, -0.4), (0.35, -0.4), (0.7, -0.4),  # density_area_close
     # (-0.8, -0.5), (-0.4, -0.5), (0, -0.5), (0.4, -0.5), (0.8, -0.5),  # density_area_middle
     # (-0.9, -0.6), (-0.6, -0.6), (0, -0.6), (0.6, -0.6), (0.9, -0.6),  # density_area_far
 ]
+
+# depending on how many vision segments we use, compute their spacing in the substrate on x-axis
+vision_segments_x_coord = [-1. + i * 2./(len(vision_segments) - 1) for i in range(len(vision_segments))]
+INPUT_COORDINATES.extend([(x, -1.) for x in vision_segments_x_coord]) #vision_segments_wall_distances
+INPUT_COORDINATES.extend([(x, -0.8) for x in vision_segments_x_coord]) #vision_segments_food_distances
+INPUT_COORDINATES.extend([(x, -0.7) for x in vision_segments_x_coord]) #vision_segments_food_angles
 
 OUTPUT_COORDINATES = \
     [
@@ -244,7 +252,7 @@ if __name__ == "__main__":
     current_run_directory = f"alg_runs/run_{timestamp}_{run_specificity}"
 
     # Run! Only relevant to look at the winner.
-    WINNER = run(300, make_ant_env, 3, VERSION, True, os.path.join(current_run_directory, "plots"))[0]
+    WINNER = run(200, make_ant_env, 3, VERSION, True, os.path.join(current_run_directory, "plots"))[0]
 
     os.makedirs(current_run_directory, exist_ok=True)
     # Save CPPN if wished reused and draw it + winner to file.

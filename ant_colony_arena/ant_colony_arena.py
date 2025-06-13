@@ -43,7 +43,7 @@ TIME_LIMIT = SIM_FPS * 10  # 30 seconds
 ANT_DIM = vec2d(5, 5)
 AGENT_SPEED = 20.00  # Maximum ant speed observed in data (pixels)
 AGENT_ACCELERATION = 10.00
-TURN_RATE = 2 * 0.3575  # Maximum turning rate observed in data (radians)
+TURN_RATE = 0.3575  # Maximum turning rate observed in data (radians)
 
 SPEED_PENALTY_BASE = 1.5 ** (1 / AGENT_SPEED)
 
@@ -61,26 +61,29 @@ DRAW_ANT_VISION = True
 # LOAD_ANTS = True  # Whether to load real ant data or use empty list
 # LOAD_PHEROMONES = False  # Whether to load pheromone data or calculate in real-time
 
+# 5 vision segments
+# vision_segments = [
+#     # Front arc: Directly in front of the agent
+#     # Bright red, intense and strong
+#     ((-math.pi / 2, -3 * math.pi / 10), (255, 0, 0), 'forward_l1'),
+#     # Vivid orange, warm and energetic
+#     ((-3 * math.pi / 10, -math.pi / 10), (255, 165, 0), 'forward_l2'),
+#     # Bright yellow, cheerful and vibrant
+#     ((-math.pi / 10, math.pi / 10), (255, 255, 0), 'forward'),
+#     # Bright green, fresh and lively
+#     ((math.pi / 10, 3 * math.pi / 10), (0, 255, 0), 'forward_r2'),
+#     # Sky blue, cool and calm
+#     ((3 * math.pi / 10, math.pi / 2), (0, 0, 255), 'forward_r1'),
+# ]
 
+# 3 vision segments
 vision_segments = [
-    # Front arc: Directly in front of the agent
     # Bright red, intense and strong
-    ((-math.pi / 2, -3 * math.pi / 10), (255, 0, 0), 'forward_l1'),
-    # Vivid orange, warm and energetic
-    ((-3 * math.pi / 10, -math.pi / 10), (255, 165, 0), 'forward_l2'),
+    ((-math.pi / 2, -math.pi / 6), (255, 0, 0), 'forward_l1'),
     # Bright yellow, cheerful and vibrant
-    ((-math.pi / 10, math.pi / 10), (255, 255, 0), 'forward'),
-    # Bright green, fresh and lively
-    ((math.pi / 10, 3 * math.pi / 10), (0, 255, 0), 'forward_r2'),
+    ((-math.pi / 6, math.pi / 6), (255, 255, 0), 'forward'),
     # Sky blue, cool and calm
-    ((3 * math.pi / 10, math.pi / 2), (0, 0, 255), 'forward_r1'),
-    # Remove backwards detection zones
-    # # Deep indigo, mysterious and strong
-    # ((-9 * math.pi / 6, -7 * math.pi / 6), (75, 0, 130), 'backward_r1'),
-    # # Soft violet, dreamy and delicate
-    # ((-7 * math.pi / 6, -5 * math.pi / 6), (238, 130, 238), 'backward'),
-    # # Soft pink, gentle and warm
-    # ((-5 * math.pi / 6, -math.pi / 2), (255, 192, 203), 'backward_l1'),
+    ((math.pi / 6, math.pi / 2), (0, 0, 255), 'forward_r1'),
 ]
 
 view_ranges = [MIN_VISION_RANGE, MIDDLE_VISION_RANGE, MAX_VISION_RANGE]
