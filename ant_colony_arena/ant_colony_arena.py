@@ -44,6 +44,7 @@ ANT_DIM = vec2d(5, 5)
 AGENT_SPEED = 20.00  # Maximum ant speed observed in data (pixels)
 AGENT_ACCELERATION = 10.00
 TURN_RATE = 0.3575  # Maximum turning rate observed in data (radians)
+NEST_RADIUS = 50
 
 SPEED_PENALTY_BASE = 1.5 ** (1 / AGENT_SPEED)
 
@@ -180,9 +181,9 @@ def euclidean_distances(data):
     return distances
 
 
-def is_rectangle_in_circle(x, y, circle_center, circle_radius):
+def is_rectangle_in_circle(x, y, circle_center, circle_radius, fully_contained=True):
     """
-    Check if a pygame.Rect is completely contained within a circle.
+    Check if a pygame.Rect is completely or partially contained within a circle.
 
     Parameters:
     rect (pygame.Rect): The rectangle to check.
@@ -190,7 +191,8 @@ def is_rectangle_in_circle(x, y, circle_center, circle_radius):
     circle_radius (float): The radius of the circle.
 
     Returns:
-    bool: True if the rectangle is completely contained within the circle, False otherwise.
+    bool: if fully_contained = True, return True if rect fully contained within circle
+          if fully_contained = False, return True if rect partially contained within circle.
     """
     rect = pygame.Rect(x - ANT_DIM.x / 2., y - ANT_DIM.y / 2.,
                        ANT_DIM.x, ANT_DIM.y)
@@ -207,7 +209,10 @@ def is_rectangle_in_circle(x, y, circle_center, circle_radius):
         distance = math.sqrt(dx ** 2 + dy ** 2)
 
         if distance > circle_radius:
-            return False
+            if fully_contained:
+                return False
+        elif not fully_contained:
+            return True
 
     return True
 
@@ -659,6 +664,15 @@ class Ant():
         # self._turn()
         self._move()
 
+class Nest:
+    """Class for the ant nest"""
+    def __init__(self, pos, radius=10):
+        self.pos = vec2d(*pos)
+        self.radius = radius
+        self.collected_food = 0.
+
+    def is_ant_in_nest(self, ant: Ant):
+        return is_rectangle_in_circle(ant.pos.x, ant.pos.y, self.pos, self.radius)
 
 def speed_penalty_eq(speed):
     """
@@ -680,6 +694,7 @@ class AntColonyEnv(ParallelEnv):
         self.np_random, seed = self.seed(seed=69)
 
         self.ants = None
+        self.nest = None
         self.possible_agents = [f"ant_{i}" for i in range(nr_of_ants)]
         self.nr_of_ants = nr_of_ants
         self.nr_of_food = nr_of_food
@@ -737,89 +752,6 @@ class AntColonyEnv(ParallelEnv):
 
     def seed(self, seed=None):
         return seeding.np_random(seed)
-
-    # def _get_interval_data(self, trail, start_time, interval=False):
-    #     theta = -1
-    #     threshold = 5
-    #     time = start_time + 1
-    #     time_offset = 0
-    #     distance = 0
-    #     while theta < 0 and time != len(trail):
-    #         try:
-    #             dx, dy = trail[time] - trail[start_time]
-    #         except IndexError:
-    #             break
-    #         if dx == 0 and dy == 0:
-    #             time_offset += 1
-    #         else:
-    #             current_distance = np.sqrt(dx ** 2 + dy ** 2)
-    #             if current_distance > threshold:
-    #                 theta = math.atan2(dy, dx) % (2 * math.pi)
-    #                 distance = current_distance
-    #         time += 1
-    #
-    #     return distance, theta, (time - start_time), time_offset
-    #
-    # def _get_angle_from_trajectory(self, trail, start_time):
-    #     _, angle, _, _ = self._get_interval_data(trail, start_time)
-    #     return angle
-
-    # def _identify_overlapping_grid_cells(
-    #         self,
-    #         pos: tuple,
-    #         bounding_box: int,
-    #         grid_size: tuple = (SCREEN_W, SCREEN_H),
-    #         coarse_grid_size: tuple = (20, 20)
-    # ) -> list:
-    #     """
-    #     Identify which cells in the discretized grid an ant overlaps with based on its position and bounding box.
-    #
-    #     Parameters:
-    #     - x (float): X-coordinate of the ant in simulation space (0 <= x < grid_width).
-    #     - y (float): Y-coordinate of the ant in simulation space (0 <= y < grid_height).
-    #     - bounding_box (int): Size of the ant's bounding box in pixels (assumed square).
-    #     - grid_size (tuple): Size of the simulation grid in pixels (height, width). Default is (900, 900).
-    #     - coarse_grid_size (tuple): Size of the discretized grid (height, width). Default is (20, 20).
-    #
-    #     Returns:
-    #     - List[Tuple[int, int]]: List of (row, column) indices of grid cells overlapped by the ant.
-    #     """
-    #     x, y = pos
-    #
-    #     fine_height, fine_width = grid_size
-    #     coarse_height, coarse_width = coarse_grid_size
-    #
-    #     # Calculate discretization factors
-    #     factor_y = fine_height / coarse_height
-    #     factor_x = fine_width / coarse_width
-    #
-    #     # Calculate bounding box boundaries in simulation space
-    #     half_box = bounding_box / 2
-    #     x_min = max(x - half_box, 0)
-    #     x_max = min(x + half_box, fine_width - 1)
-    #     y_min = max(y - half_box, 0)
-    #     y_max = min(y + half_box, fine_height - 1)
-    #
-    #     # Map simulation space boundaries to coarse grid indices
-    #     row_min = int(math.floor(y_min / factor_y))
-    #     row_max = int(math.floor(y_max / factor_y))
-    #     col_min = int(math.floor(x_min / factor_x))
-    #     col_max = int(math.floor(x_max / factor_x))
-    #
-    #     # Ensure indices are within coarse grid bounds
-    #     row_min = max(row_min, 0)
-    #     row_max = min(row_max, coarse_height - 1)
-    #     col_min = max(col_min, 0)
-    #     col_max = min(col_max, coarse_width - 1)
-    #
-    #     # Generate list of overlapping grid cells
-    #     overlapping_cells = []
-    #     for row in range(row_min, row_max + 1):
-    #         for col in range(col_min, col_max + 1):
-    #             overlapping_cells.append((row, col))
-    #
-    #     return overlapping_cells
-
 
     def _angle_difference(self, angle1, angle2):
         """
@@ -908,6 +840,11 @@ class AntColonyEnv(ParallelEnv):
                 if is_rectangle_in_circle(x, y, self.ant_arena.arena_center, self.ant_arena.arena_radius):
                     self.ants[agent] = Ant((x, y), theta)
                     break
+
+        max_nest_draw_radius = self.ant_arena.arena_radius * 0.60 - NEST_RADIUS * 2
+        x, y = rng.uniform(-max_nest_draw_radius, max_nest_draw_radius, size=2)
+        x, y = (int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y))
+        self.nest = Nest((x, y), NEST_RADIUS)
 
         self._respawn_food()
 
@@ -1026,6 +963,14 @@ class AntColonyEnv(ParallelEnv):
             (225, 225, 140),
             (int(best_ant.pos.x), int(best_ant.pos.y)),
             MAX_VISION_RANGE
+        )
+
+        ## DRAW NEST
+        pygame.draw.circle(
+            canvas,
+            (160, 110, 30),
+            (int(self.nest.pos.x), int(self.nest.pos.y)),
+            self.nest.radius
         )
 
         ### DRAW TRAILS FIRST
