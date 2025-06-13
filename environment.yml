@@ -12,3 +12,6 @@ dependencies: # The list of packages to include in your environment
     - pip # Install pip in your environment
     - pip: # Include pip dependencies last
         - neat-python
+#       cannot be done here: run in terminal ->
+#       conda remove pygame
+#       pip install pygame==2.6.1 --no-binary pygame==2.6.1
