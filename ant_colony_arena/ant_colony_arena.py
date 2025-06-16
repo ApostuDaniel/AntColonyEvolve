@@ -539,17 +539,19 @@ class Ant():
             if distance_squared <= vision_range_squared:
                 # Only calculate angle for ants within range
                 angle_to_food = math.atan2(dy, dx) % (2 * math.pi)
+                # normalized angle
+                norm_angle_to_food = angle_to_food / (2 * math.pi)
 
                 # Find matching segment
                 for start_angle, stop_angle, segment_idx in segment_boundaries:
                     if start_angle < stop_angle:
                         if start_angle <= angle_to_food <= stop_angle:
-                            detected_food[segment_idx].append((food_x, food_y, angle_to_food))
+                            detected_food[segment_idx].append((food_x, food_y, norm_angle_to_food))
                             density_areas[segment_idx][fitting_view_range_idx]['food'] += quantity
                             break
                     elif angle_to_food >= start_angle or angle_to_food <= stop_angle:
                         # Angle wraps around 2π boundary
-                        detected_food[segment_idx].append((food_x, food_y, angle_to_food))
+                        detected_food[segment_idx].append((food_x, food_y, norm_angle_to_food))
                         density_areas[segment_idx][fitting_view_range_idx]['food'] += quantity
                         break
 
@@ -675,20 +677,20 @@ class Ant():
         result = [
             r_norm,  # Normalized radial position
             theta_norm,  # Normalized angular position
-            self.speed / AGENT_SPEED,  # Current speed
-            self.theta,  # Current orientation
-            self.current_energy / ANT_LIFE, # normalize
-            self.carried_food / ANT_CARRY_CAPACITY, # normalize
-            int(ant_in_nest),
+            self.speed / AGENT_SPEED,  # Normalized current speed
+            self.theta / (2 * math.pi),  # Normalized current orientation
+            self.current_energy / ANT_LIFE, # normalized health
+            self.carried_food / ANT_CARRY_CAPACITY, # normalize food carry
+            int(ant_in_nest), # 1 if ant is in nest, 0 otherwise
             nest_distance / (self.arena_radius * 2), # normalize to arena diameter, the maximum distance between ant and nest
-            nest_angle,
+            nest_angle / (2 * math.pi), # normalized angle to nest
         ]
 
         # add scaled nearest wall distances per vision segment
         result.extend([self.wall_distances[i] for i in range(len(self.wall_distances))])
         # add nearest food distances per vision segment
         result.extend([self.nearest_food_distances[i]  for i in range(len(self.nearest_food_distances))])
-        # # add angle to nearest food per vision segment
+        # add normalized angle to nearest food per vision segment
         result.extend([self.nearest_food_angles[i]  for i in range(len(self.nearest_food_angles))])
 
         # Include the food density for each food detection area
@@ -791,16 +793,16 @@ class AntColonyEnv(ParallelEnv):
         env_obs_spaces = {
             'r_norm': Box(0.0,1.0),
             'theta_norm': Box(-1.0, 1.0),
-            'speed': Box(-AGENT_SPEED, AGENT_SPEED, (1,), np.float32),
-            'theta': Box(0.0, 2 * math.pi, (1,), np.float32),
+            'speed': Box(-1., 1., (1,), np.float32),
+            'theta': Box(0.0, 1., (1,), np.float32),
             "current_energy": Box(0., 1., (1, ) , np.float32),
             "carried_food": Box(0., 1., (1, ) , np.float32),
             "ant_in_nest": Box(0., 1., (1, ) , np.float32),
             "distance_to_nest": Box(0.0, 1., (1, ), np.float32),
-            "angle_to_nest": Box(0.0, 2 * math.pi, (1,), np.float32),
+            "angle_to_nest": Box(0.0, 1., (1,), np.float32),
             'vision_segments_wall_distances': Box(0.0, 1.0, (len(vision_segments), np.float32)),
             'vision_segments_food_distances': Box(0.0, 1.0,(len(vision_segments), np.float32)),
-            'vision_segments_food_angles': Box(-1.0, 2 * math.pi, (len(vision_segments),)),
+            'vision_segments_food_angles': Box(-1.0, 1., (len(vision_segments),)),
             # 'density_areas': Box(0.0, 1.0,(len(vision_segments) * len(view_ranges),)),
             # used when testing just the closest density sensors
             # 'density_areas': Box(0.0, 1.0, (len(vision_segments),)),
@@ -837,7 +839,7 @@ class AntColonyEnv(ParallelEnv):
             return -50
 
         nest_reward = self.nest.food_register.get(agent, 0)
-        reward = (nest_reward * 2) + ant.current_food / 3 - int(ant.wall_collision)
+        reward = (nest_reward * 5) + ant.current_food / 5 - int(ant.wall_collision)
         ant.total_reward += reward
 
         return reward

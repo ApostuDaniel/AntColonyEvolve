@@ -254,7 +254,7 @@ def run(gens, env_fun, trials, version, parallel_trials=False, output_dir=None):
 
 def make_ant_env():
     # env = ant_arena.AntColonyEnv(30, 50, render_mode='human')
-    env = ant_arena.AntColonyEnv(30, 50)
+    env = ant_arena.AntColonyEnv(40, 50)
     env.reset()
     return env
 
@@ -270,7 +270,7 @@ if __name__ == "__main__":
     current_run_directory = f"alg_runs/run_{timestamp}_{run_specificity}"
 
     # Run! Only relevant to look at the winner.
-    WINNER = run(300, make_ant_env, 3, VERSION, True, os.path.join(current_run_directory, "plots"))[0]
+    WINNER = run(200, make_ant_env, 3, VERSION, True, os.path.join(current_run_directory, "plots"))[0]
 
     os.makedirs(current_run_directory, exist_ok=True)
     # Save CPPN if wished reused and draw it + winner to file.
