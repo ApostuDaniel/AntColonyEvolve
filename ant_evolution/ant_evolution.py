@@ -22,7 +22,7 @@ import multiprocessing
 from functools import partial
 
 # S, M or L; Small, Medium or Large (logic implemented as "Not 'S' or 'M' then Large").
-VERSION = "S"
+VERSION = "M"
 VERSION_TEXT = "small" if VERSION == "S" else "medium" if VERSION == "M" else "large"
 
 # Original input coordinates based on diagram
@@ -59,6 +59,8 @@ INPUT_COORDINATES = [
     (0.0, -0.1), # theta_norm
     (0.0, -0.2), # speed
     (0.0, -0.3), # theta
+    (-0.1, -0.4), (0.1, -0.4), # current_energy carried_food
+    (0., -0.5), (0.2, -0.5), (-0.2, -0.5), # ant_in_nest distance_to_nest angle_to_nest
     # (-1, -1.), (-0.5, -1.),(0, -1.), (0.5, -1.), (1, -1.), #vision_segments_wall_distances
     # (-1, -0.8), (-0.5, -0.8),(0, -0.8), (0.5, -0.8), (1, -0.8),  # vision_segments_food_distances
     # (-1, -0.7), (-0.5, -0.7),(0, -0.7), (0.5, -0.7), (1, -0.7),  # vision_segments_food_angles
@@ -115,13 +117,6 @@ def ini_pop(state, stats, config, output, output_dir=None):
     pop.add_reporter(stats)
     return pop
 
-def make_ant_env():
-    # env = ant_arena.AntColonyEnv(50, 50, render_mode='human')
-    env = ant_arena.AntColonyEnv(50, 50)
-    env.reset()
-    return env
-
-
 def _run_one_trial(nets, networks, env):
     """
     Helper function to run a single trial using a pre-created environment and networks.
@@ -135,30 +130,47 @@ def _run_one_trial(nets, networks, env):
     for net in nets:
         net.reset()
 
-    observations, infos = env.reset()
-    terminations = {}
-    truncations = {}
-    total_rewards = [0] * len(networks)
+    # We do this because sometimes len of networks is smaller than len of agents
+    observations, infos = env.reset(options={"nr_of_agents": len(nets)})
+    terminations = {"placeholder": False}
+    truncations = {"placeholder": False}
+    total_rewards = [0] * len(nets)
+    # When agents are terminated during run, but the association needs to remain the same
+    agent_nets = dict(zip(env.agents, list(range(len(nets)))))
 
-    while env.agents and not (any(terminations.values()) or any(truncations.values())):
+    while env.agents and not (all(terminations.values()) or any(truncations.values())):
 
         outputs = []
-        for i, network in enumerate(networks):
-            agent_id = f"ant_{i}"
-            if agent_id in env.agents:
-                obs = observations[agent_id]
-                # Multiple activations if configured
-                for _ in range(network.activations):
-                    output = nets[i].activate(np.array(obs))
-                outputs.append((agent_id, output))
+        for agent in env.agents:
+            net_id = agent_nets[agent]
+            net, network = nets[net_id], networks[net_id]
+            obs = observations[agent]
+            # Multiple activations if configured
+            for _ in range(network.activations):
+                output = net.activate(np.array(obs))
+            outputs.append((agent, output))
+
+
+        # for i, network in enumerate(networks):
+        #     agent_id = f"ant_{i}"
+        #     if agent_id in env.agents:
+        #         obs = observations[agent_id]
+        #         # Multiple activations if configured
+        #         for _ in range(network.activations):
+        #             output = nets[i].activate(np.array(obs))
+        #         outputs.append((agent_id, output))
 
         actions = dict(outputs)
         observations, rewards, terminations, truncations, infos = env.step(actions)
 
-        for i in range(len(networks)):
-            agent_id = f"ant_{i}"
-            if agent_id in rewards:
-                total_rewards[i] += rewards[agent_id]
+        for agent in rewards:
+            net_id = agent_nets[agent]
+            total_rewards[net_id] += rewards[agent]
+
+        # for i in range(len(networks)):
+        #     agent_id = f"ant_{i}"
+        #     if agent_id in rewards:
+        #         total_rewards[i] += rewards[agent_id]
 
 
     return total_rewards
@@ -240,19 +252,25 @@ def run(gens, env_fun, trials, version, parallel_trials=False, output_dir=None):
     print(f"es_hyperneat_ant_evolution_{VERSION_TEXT} done")
     return winner, stats
 
+def make_ant_env():
+    # env = ant_arena.AntColonyEnv(30, 50, render_mode='human')
+    env = ant_arena.AntColonyEnv(30, 50)
+    env.reset()
+    return env
+
 
 if __name__ == "__main__":
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.INFO)
 
-    run_specificity="es_hyperneat_parameters_fixed"
+    run_specificity="colony_reward_fun"
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     current_run_directory = f"alg_runs/run_{timestamp}_{run_specificity}"
 
     # Run! Only relevant to look at the winner.
-    WINNER = run(200, make_ant_env, 3, VERSION, True, os.path.join(current_run_directory, "plots"))[0]
+    WINNER = run(300, make_ant_env, 3, VERSION, True, os.path.join(current_run_directory, "plots"))[0]
 
     os.makedirs(current_run_directory, exist_ok=True)
     # Save CPPN if wished reused and draw it + winner to file.
