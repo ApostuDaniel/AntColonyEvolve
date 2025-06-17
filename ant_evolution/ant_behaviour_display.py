@@ -38,29 +38,34 @@ from ant_evolution import VERSION, params, SUBSTRATE
 # SUBSTRATE = Substrate(INPUT_COORDINATES, OUTPUT_COORDINATES)
 
 if __name__ == "__main__":
-    env = ant_arena.AntColonyEnv(5, 50, render_mode='human')
+    env = ant_arena.AntColonyEnv(10, 50, render_mode='human')
     env.reset()
 
-    best_agent_file="./alg_runs/run_2025-06-13_12-52-06_es_hyperneat_parameters_fixed/es_hyperneat_ant_evolution_small_cppn.pkl"
+    best_agent_file="./alg_runs/run_2025-06-17_19-54-20_colony_reward_fun/es_hyperneat_ant_evolution_medium_cppn.pkl"
     CPPN = []
     with open(best_agent_file, 'rb') as file:
         CPPN = pickle.load(file)
 
     networks = [ESNetwork(SUBSTRATE, CPPN, params(VERSION)) for a in env.agents]
     nets = [network.create_phenotype_network() for network in networks]
+    agent_nets = dict(zip(env.agents, list(range(len(nets)))))
 
     while True:
         observations, infos = env.reset()
         terminations = [False]
         truncations = [False]
-        while env.agents and not any(terminations) and not any(truncations):
+        while env.agents and not (all(terminations) or any(truncations)):
             outputs = []
-            for i, network in enumerate(networks):
+            for agent in env.agents:
+                net_id = agent_nets[agent]
+                net, network = nets[net_id], networks[net_id]
+                obs = observations[agent]
+                # Multiple activations if configured
                 for _ in range(network.activations):
-                    output = nets[i].activate(np.array(observations[f"ant_{i}"]))
-                outputs.append(output)
+                    output = net.activate(np.array(obs))
+                outputs.append((agent, output))
 
-            actions = {f"ant_{i}": o for i, o in enumerate(outputs)}
+            actions = dict(outputs)
             observations, rewards, terminations, truncations, infos = env.step(actions)
             terminations = [terminations[a] for a in terminations]
             truncations = [truncations[a] for a in truncations]
