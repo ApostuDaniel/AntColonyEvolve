@@ -2,7 +2,6 @@ import logging
 import os
 import pickle
 from datetime import datetime
-from pickle import FALSE
 
 import numpy as np
 from neat import StdOutReporter
@@ -55,12 +54,15 @@ VERSION_TEXT = "small" if VERSION == "S" else "medium" if VERSION == "M" else "l
 
 #coordinates that we try to allign parallel
 INPUT_COORDINATES = [
-    (0.0, 0.0), # r_norm
-    (0.0, -0.1), # theta_norm
-    (0.0, -0.2), # speed
-    (0.0, -0.3), # theta
-    (-0.1, -0.4), (0.1, -0.4), # current_energy carried_food
-    (0., -0.5), (0.2, -0.5), (-0.2, -0.5), # ant_in_nest distance_to_nest angle_to_nest
+    (0., 0.0), # r_norm
+    (0., -0.1), # theta_norm
+    (0., -0.2), # speed
+    (0., -0.3), # theta
+    (0., -0.4), # current_energy
+    (0., -0.45), # carried_food
+    (0., -0.53), # ant_in_nest
+    (0., -0.56), # distance_to_nest
+    (0., -0.59), # angle_to_nest
     # (-1, -1.), (-0.5, -1.),(0, -1.), (0.5, -1.), (1, -1.), #vision_segments_wall_distances
     # (-1, -0.8), (-0.5, -0.8),(0, -0.8), (0.5, -0.8), (1, -0.8),  # vision_segments_food_distances
     # (-1, -0.7), (-0.5, -0.7),(0, -0.7), (0.5, -0.7), (1, -0.7),  # vision_segments_food_angles
@@ -270,7 +272,7 @@ if __name__ == "__main__":
     current_run_directory = f"alg_runs/run_{timestamp}_{run_specificity}"
 
     # Run! Only relevant to look at the winner.
-    WINNER = run(700, make_ant_env, 3, VERSION, True, os.path.join(current_run_directory, "plots"))[0]
+    WINNER = run(300, make_ant_env, 3, VERSION, True, os.path.join(current_run_directory, "plots"))[0]
 
     os.makedirs(current_run_directory, exist_ok=True)
     # Save CPPN if wished reused and draw it + winner to file.

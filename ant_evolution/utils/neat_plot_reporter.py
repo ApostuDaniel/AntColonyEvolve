@@ -1,5 +1,6 @@
 import os
 from datetime import datetime
+from pathlib import Path
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -144,6 +145,11 @@ class PlotReporter(BaseReporter):
         """Save the current plot to a file with timestamp."""
         # Create directory if needed
         os.makedirs(self.plot_dir, exist_ok=True)
+
+        # remove all older plots, data is allways updated in the new plot
+        last_files = [x for x in Path(self.plot_dir).iterdir()]
+        for file in last_files:
+            os.remove(file)
 
         # Generate filename with timestamp and generation number
         timestamp = datetime.now().strftime("%Y%m%d_%H-%M-%S")

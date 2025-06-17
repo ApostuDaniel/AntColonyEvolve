@@ -614,9 +614,13 @@ class Ant():
     def handle_health(self):
         '''
         Remove from the agents food, then health at every timestep
+        Refresh energy if ant in nest
         :return:
         '''
-        health_lost = speed_penalty_eq(abs(self.speed)) / 1.5
+        if self.in_nest:
+            self.current_energy = ANT_LIFE
+            return
+        health_lost = speed_penalty_square(self.speed)
         if self.carried_food >= health_lost:
             self.carried_food -= health_lost
         else:
@@ -732,7 +736,7 @@ class Nest:
     def clear_food_register(self):
         self.food_register = {}
 
-def speed_penalty_eq(speed):
+def speed_penalty_exponential(speed):
     """
     Exponential speed punishment
     :param speed: agents current abs speed
@@ -740,6 +744,13 @@ def speed_penalty_eq(speed):
     """
     return (SPEED_PENALTY_BASE ** int(speed)) - 1
 
+def speed_penalty_square(speed):
+    """
+    Square speed punishment
+    :param speed: agents current abs speed
+    :return: how much the reward should diminish
+    """
+    return (abs(speed) ** 2) / (AGENT_SPEED * (AGENT_SPEED * 0.9))
 
 class AntColonyEnv(ParallelEnv):
     metadata = {
@@ -920,6 +931,17 @@ class AntColonyEnv(ParallelEnv):
                 if is_rectangle_in_circle(x, y, self.ant_arena.arena_center, self.ant_arena.arena_radius):
                     self.ants[agent] = Ant((x, y), theta)
                     break
+
+        # spawn ants randomly
+        # max_ant_draw_radius = self.ant_arena.arena_radius * 0.80 - ANT_DIM.x * 2
+        # for agent in self.agents:
+        #     while True:
+        #         x, y = rng.uniform(-max_ant_draw_radius, max_ant_draw_radius, size=2)
+        #         x, y = (int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y))
+        #         theta = rng.uniform(0.0, 2 * math.pi)
+        #         if is_rectangle_in_circle(x, y, self.ant_arena.arena_center, self.ant_arena.arena_radius):
+        #             self.ants[agent] = Ant((x, y), theta)
+        #             break
 
         # spawn food
         self._respawn_food()
