@@ -26,7 +26,7 @@ formatter = logging.Formatter('%(asctime)s [%(levelname)s] In %(pathname)s:%(lin
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
-SIM_FPS = 40  # Simulation environment FPS
+SIM_FPS = 60  # Simulation environment FPS
 
 SCREEN_W = 1200
 SCREEN_H = 1200
@@ -37,8 +37,7 @@ arena_sizes = namedtuple('arena_sizes', ['arena_center', 'arena_radius'])
 
 # Global parameters for agent control
 TIMESTEP = 1. / SIM_FPS  # Not sure if this will be necessary, given the fixed FPS?
-# TIME_LIMIT = SIM_FPS * 60   # 60 seconds
-TIME_LIMIT = SIM_FPS * 10  # 30 seconds
+TIME_LIMIT = SIM_FPS * 10  # 10 seconds
 
 ANT_DIM = vec2d(5, 5)
 AGENT_SPEED = 20.00  # Maximum ant speed observed in data (pixels)
@@ -617,11 +616,11 @@ class Ant():
         Remove from the agents food, then health at every timestep
         :return:
         '''
-        health_lost = speed_penalty_eq(abs(self.speed)) / 2
+        health_lost = speed_penalty_eq(abs(self.speed)) / 1.5
         if self.carried_food >= health_lost:
             self.carried_food -= health_lost
         else:
-            self.current_energy -= health_lost - self.carried_food
+            self.current_energy -= (health_lost - self.carried_food)
             self.carried_food = 0
 
 
@@ -835,11 +834,11 @@ class AntColonyEnv(ParallelEnv):
         ant = self.ants[agent]
         # negative reward if agent died
         if self.terminations[agent]:
-            ant.total_reward -= 50
-            return -50
+            ant.total_reward -= 100
+            return -100
 
         nest_reward = self.nest.food_register.get(agent, 0)
-        reward = (nest_reward * 5) + ant.current_food / 5 - int(ant.wall_collision)
+        reward = (nest_reward * 7) + ant.current_food / 5 - int(ant.wall_collision)
         ant.total_reward += reward
 
         return reward
@@ -903,24 +902,24 @@ class AntColonyEnv(ParallelEnv):
         self.agents = copy.deepcopy(self.possible_agents[:nr_of_agents])
 
         self.ants = {}
-
-        # spawn ants
         rng = np.random.default_rng()
-        max_ant_draw_radius = self.ant_arena.arena_radius * 0.80 - ANT_DIM.x * 2
-        for agent in self.agents:
-            while True:
-                x, y = rng.uniform(-max_ant_draw_radius, max_ant_draw_radius, size=2)
-                x, y = (int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y))
-                theta = rng.uniform(0.0, 2 * math.pi)
-                if is_rectangle_in_circle(x, y, self.ant_arena.arena_center, self.ant_arena.arena_radius):
-                    self.ants[agent] = Ant((x, y), theta)
-                    break
 
         # spawn nest
         max_nest_draw_radius = self.ant_arena.arena_radius * 0.60 - NEST_RADIUS * 2
         x, y = rng.uniform(-max_nest_draw_radius, max_nest_draw_radius, size=2)
         x, y = (int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y))
         self.nest = Nest((x, y), NEST_RADIUS)
+
+        # spawn ants around nest
+        max_ant_draw_radius = self.nest.radius * 3
+        for agent in self.agents:
+            while True:
+                x, y = rng.uniform(-max_ant_draw_radius, max_ant_draw_radius, size=2)
+                x, y = (int(self.nest.pos.x + x), int(self.nest.pos.y + y))
+                theta = rng.uniform(0.0, 2 * math.pi)
+                if is_rectangle_in_circle(x, y, self.ant_arena.arena_center, self.ant_arena.arena_radius):
+                    self.ants[agent] = Ant((x, y), theta)
+                    break
 
         # spawn food
         self._respawn_food()
