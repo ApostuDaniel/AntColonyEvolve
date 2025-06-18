@@ -1,10 +1,12 @@
 import os
 from datetime import datetime
 from pathlib import Path
-
+import tkinter as tk
 import matplotlib
 import matplotlib.pyplot as plt
 import time
+
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from neat.math_util import mean, stdev
 from neat.six_util import itervalues, iterkeys
 from neat.reporting import BaseReporter
@@ -38,8 +40,22 @@ class PlotReporter(BaseReporter):
 
         # Initialize population fitness plot
         plt.ion()
-        self.fig, self.ax = plt.subplots()
-        self.ax.set_title('Fitness over Generations')
+
+        # Create the main application window
+        self.root = tk.Tk()
+        self.root.title("ESHyperneat Plots")
+        self.root.geometry("1200x600")
+
+        # Create frames for each plot
+        frame1 = tk.Frame(self.root)
+        frame1.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        frame2 = tk.Frame(self.root)
+        frame2.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
+        # Create figures and embed them in Tkinter frames
+        self.fig = plt.Figure(figsize=(6, 4), dpi=100)
+        self.ax = self.fig.add_subplot(111)
+        self.ax.set_title('Population Fitness over Generations')
         self.ax.set_xlabel('Generation')
         self.ax.set_ylabel('Fitness')
         self.best_line, = self.ax.plot([], [], 'b-', label='Best Fitness')
@@ -47,17 +63,27 @@ class PlotReporter(BaseReporter):
         self.fill = None  # Will hold the std deviation fill
         self.ax.grid(alpha=0.3)
         self.ax.legend(loc='best')
-        plt.tight_layout()
-        plt.pause(0.01)
+        self.fig.tight_layout()
 
-        # Initialize species fitness plot
-        self.fig2, self.ax2 = plt.subplots()
+        self.fig2 = plt.Figure(figsize=(6, 4), dpi=100)
+        self.ax2 = self.fig2.add_subplot(111)
         self.ax2.set_title('Species Best Fitness over Generations')
         self.ax2.set_xlabel('Generation')
         self.ax2.set_ylabel('Fitness')
         self.ax2.grid(alpha=0.3)
-        plt.tight_layout()
-        plt.pause(0.01)
+        self.fig2.tight_layout()
+
+        # Embed plots in Tkinter frames
+        self.canvas1 = FigureCanvasTkAgg(self.fig, master=frame1)
+        self.canvas1.draw()
+        self.canvas1.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        self.canvas2 = FigureCanvasTkAgg(self.fig2, master=frame2)
+        self.canvas2.draw()
+        self.canvas2.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        # Start the Tkinter event loop in a non-blocking way
+        self.root.update()
 
     def start_generation(self, generation):
         self.generation = generation
@@ -177,12 +203,10 @@ class PlotReporter(BaseReporter):
                 (self.generation + 1) % self.save_interval == 0):
             self.save_plots()
 
-        # Redraw both plots
-        self.fig.canvas.draw()
-        self.fig.canvas.flush_events()
-        self.fig2.canvas.draw()
-        self.fig2.canvas.flush_events()
-        plt.pause(0.01)
+        # Redraw both canvases
+        self.canvas1.draw()
+        self.canvas2.draw()
+        self.root.update()
 
     def save_plots(self):
         """Save both population and species fitness plots."""
