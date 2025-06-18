@@ -1,3 +1,4 @@
+import copy
 import logging
 import os
 import pickle
@@ -152,16 +153,6 @@ def _run_one_trial(nets, networks, env):
                 output = net.activate(np.array(obs))
             outputs.append((agent, output))
 
-
-        # for i, network in enumerate(networks):
-        #     agent_id = f"ant_{i}"
-        #     if agent_id in env.agents:
-        #         obs = observations[agent_id]
-        #         # Multiple activations if configured
-        #         for _ in range(network.activations):
-        #             output = nets[i].activate(np.array(obs))
-        #         outputs.append((agent_id, output))
-
         actions = dict(outputs)
         observations, rewards, terminations, truncations, infos = env.step(actions)
 
@@ -169,22 +160,87 @@ def _run_one_trial(nets, networks, env):
             net_id = agent_nets[agent]
             total_rewards[net_id] += rewards[agent]
 
-        # for i in range(len(networks)):
-        #     agent_id = f"ant_{i}"
-        #     if agent_id in rewards:
-        #         total_rewards[i] += rewards[agent_id]
-
-
     return total_rewards
 
+def _run_one_env(index, network, env):
+    """
+    Helper function to run a single env with multiple copies of the same network.
 
-def run_es(gens, env_fun, trials, max_steps, config, params, substrate, paralel_trials=False, max_trials=100, output=True, output_dir=None):
+    :param index: the index of the genome
+    :param net: ANN to be multiplied
+    :param network: needed for activation
+    :param env: the environment to be run
+    :return:
+    """
+    nr_of_agents = len(env.agents)
+    # Make as many nets as there are agents in the env
+    nets = [network.create_phenotype_network() for _ in env.agents]
+    # Reset network states
+    for net in nets:
+        net.reset()
+
+    # We do this because sometimes len of networks is smaller than len of agents
+    observations, infos = env.reset()
+    terminations = {"placeholder": False}
+    truncations = {"placeholder": False}
+    reward = 0
+
+    # When agents are terminated during run, but the association needs to remain the same
+    agent_nets = dict(zip(env.agents, list(range(len(nets)))))
+
+    while env.agents and not (all(terminations.values()) or any(truncations.values())):
+
+        outputs = []
+        for agent in env.agents:
+            net_id = agent_nets[agent]
+            net = nets[net_id]
+            obs = observations[agent]
+            # Multiple activations if configured
+            for _ in range(network.activations):
+                output = net.activate(np.array(obs))
+            outputs.append((agent, output))
+
+        actions = dict(outputs)
+        observations, rewards, terminations, truncations, infos = env.step(actions)
+
+        reward += sum(rewards.values())
+
+    return index, (reward / nr_of_agents)
+
+
+def run_es(gens, env_fun, trials, max_steps, config, params, substrate, single_network_env=True, agents_in_env=1, parallel_trials=False, output=True, output_dir=None):
     """
     Generic OpenAI Gym runner for ES-HyperNEAT.
     """
-    # Pre-create environments for all trials
-    envs = [env_fun() for _ in range(trials)]
-    if trials == 1: env = envs[0]
+
+    if single_network_env:
+        # create an env for each genome
+        envs = [env_fun(agents_in_env) for _ in range(config.pop_size)]
+    else:
+        # Pre-create environments for all trials
+        envs = [env_fun() for _ in range(trials)]
+
+    def eval_fitness_parallel_envs(genomes, config):
+
+        curr_envs = envs[:len(genomes)]
+        cppns = [neat.nn.FeedForwardNetwork.create(g, config) for _, g in genomes]
+        networks = [ESNetwork(substrate, cppn, params) for cppn in cppns]
+
+        # Prepare trial runner
+        env_runner = partial(
+            _run_one_env,
+        )
+
+        # Run envs in parallel
+        with concurrent.futures.ProcessPoolExecutor() as executor:
+            # Map each environment to a net
+            futures = [executor.submit(env_runner, i, networks[i], curr_envs[i]) for i in range(len(genomes))]
+            results = [f.result() for f in concurrent.futures.as_completed(futures)]
+
+        # ensure that the results are in order of the genome
+        results.sort(key=lambda x: x[0])
+        for i, (_, g) in enumerate(genomes):
+            g.fitness = results[i][1]
 
     def eval_fitness(genomes, config):
 
@@ -203,7 +259,7 @@ def run_es(gens, env_fun, trials, max_steps, config, params, substrate, paralel_
         for i, (_, g) in enumerate(genomes):
             g.fitness = np.array(fitnesses[i]).mean()
 
-    def eval_fitness_parallel(genomes, config):
+    def eval_fitness_parallel_trials(genomes, config):
         # Build all networks once per generation
         cppns = [neat.nn.FeedForwardNetwork.create(g, config) for _, g in genomes]
         networks = [ESNetwork(substrate, cppn, params) for cppn in cppns]
@@ -234,8 +290,10 @@ def run_es(gens, env_fun, trials, max_steps, config, params, substrate, paralel_
     stats_one = neat.statistics.StatisticsReporter()
     pop = ini_pop(None, stats_one, config, output, output_dir)
 
-    if trials > 1 and paralel_trials:
-        winner_one = pop.run(eval_fitness_parallel, gens)
+    if single_network_env:
+        winner_one = pop.run(eval_fitness_parallel_envs, gens)
+    elif parallel_trials:
+        winner_one = pop.run(eval_fitness_parallel_trials, gens)
     else:
         winner_one = pop.run(eval_fitness, gens)
 
@@ -244,19 +302,19 @@ def run_es(gens, env_fun, trials, max_steps, config, params, substrate, paralel_
 
     return winner_one, (stats_one,)
 
-def run(gens, env_fun, trials, version, parallel_trials=False, output_dir=None):
+def run(gens, env_fun, trials, version, single_network_env=True, agents_in_env=1, parallel_trials=False, output_dir=None):
     """
     Run the ant evolution task using the Gym environment
     Returns the winning genome and the statistics of the run.
     """
     winner, stats = run_es(gens, env_fun, trials, 200, CONFIG, params(
-        version), SUBSTRATE, paralel_trials=parallel_trials, max_trials=0, output_dir=output_dir)
+        version), SUBSTRATE, single_network_env=single_network_env, agents_in_env=agents_in_env, parallel_trials=parallel_trials, output_dir=output_dir)
     print(f"es_hyperneat_ant_evolution_{VERSION_TEXT} done")
     return winner, stats
 
-def make_ant_env():
-    # env = ant_arena.AntColonyEnv(30, 50, render_mode='human')
-    env = ant_arena.AntColonyEnv(30, 50)
+def make_ant_env(ants_in_env=1):
+    # env = ant_arena.AntColonyEnv(ants_in_env, 25, render_mode='human')
+    env = ant_arena.AntColonyEnv(ants_in_env, 25)
     env.reset()
     return env
 
@@ -265,14 +323,14 @@ if __name__ == "__main__":
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.INFO)
 
-    run_specificity="colony_reward_fun"
+    run_specificity="1_net_1_env_single"
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     current_run_directory = f"alg_runs/run_{timestamp}_{run_specificity}"
 
     # Run! Only relevant to look at the winner.
-    WINNER = run(300, make_ant_env, 3, VERSION, True, os.path.join(current_run_directory, "plots"))[0]
+    WINNER = run(100, make_ant_env, 3, VERSION, True, 1, False, os.path.join(current_run_directory, "plots"))[0]
 
     os.makedirs(current_run_directory, exist_ok=True)
     # Save CPPN if wished reused and draw it + winner to file.

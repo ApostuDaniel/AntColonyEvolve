@@ -28,8 +28,8 @@ logger.addHandler(handler)
 
 SIM_FPS = 60  # Simulation environment FPS
 
-SCREEN_W = 1200
-SCREEN_H = 1200
+SCREEN_W = 900
+SCREEN_H = 900
 BOUNDARY_SCALE = 0.02
 
 vec2d = namedtuple('vec2d', ['x', 'y'])
@@ -37,14 +37,14 @@ arena_sizes = namedtuple('arena_sizes', ['arena_center', 'arena_radius'])
 
 # Global parameters for agent control
 TIMESTEP = 1. / SIM_FPS  # Not sure if this will be necessary, given the fixed FPS?
-TIME_LIMIT = SIM_FPS * 10  # 10 seconds
+TIME_LIMIT = SIM_FPS * 12  # 12 seconds
 
 ANT_DIM = vec2d(5, 5)
 AGENT_SPEED = 20.00  # Maximum ant speed observed in data (pixels)
 AGENT_ACCELERATION = 10.00
 TURN_RATE = 0.3575  # Maximum turning rate observed in data (radians)
 
-NEST_RADIUS = 50
+NEST_RADIUS = SCREEN_W / 20
 
 SPEED_PENALTY_BASE = 1.5 ** (1 / AGENT_SPEED)
 
@@ -750,7 +750,7 @@ def speed_penalty_square(speed):
     :param speed: agents current abs speed
     :return: how much the reward should diminish
     """
-    return (abs(speed) ** 2) / (AGENT_SPEED * (AGENT_SPEED * 0.9))
+    return (abs(speed) ** 2) / (AGENT_SPEED * (AGENT_SPEED * 0.75))
 
 class AntColonyEnv(ParallelEnv):
     metadata = {
