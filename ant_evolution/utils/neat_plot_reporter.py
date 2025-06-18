@@ -11,10 +11,12 @@ from neat.reporting import BaseReporter
 
 matplotlib.use('TkAgg')
 
+
 class PlotReporter(BaseReporter):
     """Uses `print` to output information and plots fitness statistics live."""
 
-    def __init__(self, show_species_detail, save_interval=None, plot_dir="../plots", plot_filename_prefix="fitness_plot"):
+    def __init__(self, show_species_detail, save_interval=None, plot_dir="../plots",
+                 plot_filename_prefix="fitness_plot"):
         self.show_species_detail = show_species_detail
         self.save_interval = save_interval
         self.plot_filename_prefix = plot_filename_prefix
@@ -23,13 +25,18 @@ class PlotReporter(BaseReporter):
         self.generation_start_time = None
         self.generation_times = []
         self.num_extinctions = 0
-        # Data storage for plotting
+
+        # Data storage for population fitness plot
         self.generation_numbers = []
         self.best_fitness = []
         self.avg_fitness = []
         self.std_fitness = []
 
-        # Initialize plot
+        # Data storage for species fitness plot
+        self.species_best_fitness = {}  # species_id -> list of (generation, fitness)
+        self.species_lines = {}  # species_id -> line object
+
+        # Initialize population fitness plot
         plt.ion()
         self.fig, self.ax = plt.subplots()
         self.ax.set_title('Fitness over Generations')
@@ -41,7 +48,15 @@ class PlotReporter(BaseReporter):
         self.ax.grid(alpha=0.3)
         self.ax.legend(loc='best')
         plt.tight_layout()
-        # plt.show(block=False)
+        plt.pause(0.01)
+
+        # Initialize species fitness plot
+        self.fig2, self.ax2 = plt.subplots()
+        self.ax2.set_title('Species Best Fitness over Generations')
+        self.ax2.set_xlabel('Generation')
+        self.ax2.set_ylabel('Fitness')
+        self.ax2.grid(alpha=0.3)
+        plt.tight_layout()
         plt.pause(0.01)
 
     def start_generation(self, generation):
@@ -54,6 +69,8 @@ class PlotReporter(BaseReporter):
             self.best_fitness = []
             self.avg_fitness = []
             self.std_fitness = []
+            self.species_best_fitness = {}
+            self.species_lines = {}
 
     def end_generation(self, config, population, species_set):
         ng = len(population)
@@ -98,25 +115,31 @@ class PlotReporter(BaseReporter):
                                                                                  best_species_id,
                                                                                  best_genome.key))
 
-        # Store data for plotting
+        # Store data for population fitness plot
         self.generation_numbers.append(self.generation)
         self.best_fitness.append(best_genome.fitness)
         self.avg_fitness.append(fit_mean)
         self.std_fitness.append(fit_std)
 
-        # Update plot
-        self.update_plot()
+        # Store species fitness data using species.fitness attribute
+        for sid, s in species.species.items():
+            if s.fitness is not None:  # Only record if fitness is available
+                if sid not in self.species_best_fitness:
+                    self.species_best_fitness[sid] = []
+                self.species_best_fitness[sid].append((self.generation, s.fitness))
 
-    def update_plot(self):
-        """Update the plot with new fitness data."""
+        # Update plots
+        self.update_plots()
+
+    def update_plots(self):
+        """Update both population and species fitness plots."""
         if not self.generation_numbers:
             return
 
-        # Update best and average fitness lines
+        # Update population fitness plot
         self.best_line.set_data(self.generation_numbers, self.best_fitness)
         self.avg_line.set_data(self.generation_numbers, self.avg_fitness)
 
-        # Update standard deviation fill
         if self.fill:
             self.fill.remove()
         y_lower = [a - s for a, s in zip(self.avg_fitness, self.std_fitness)]
@@ -125,39 +148,68 @@ class PlotReporter(BaseReporter):
             self.generation_numbers, y_lower, y_upper,
             color='g', alpha=0.1, label='±1 Std. Dev.'
         )
-
-        # Adjust axes limits to fit all data
         self.ax.relim()
         self.ax.autoscale_view()
 
-        # Save plot periodically if configured
+        # Update species fitness plot
+        for sid, data in self.species_best_fitness.items():
+            gens = [d[0] for d in data]
+            fits = [d[1] for d in data]
+
+            if sid in self.species_lines:
+                self.species_lines[sid].set_data(gens, fits)
+            else:
+                # Create new line with random color
+                line, = self.ax2.plot(gens, fits, label=f'Species {sid}')
+                self.species_lines[sid] = line
+
+        # Update legend for species plot
+        handles, labels = self.ax2.get_legend_handles_labels()
+        if handles:
+            self.ax2.legend(handles, labels, loc='best')
+
+        self.ax2.relim()
+        self.ax2.autoscale_view()
+
+        # Save plots periodically
         if (self.save_interval and
                 self.generation > 0 and
-                # generation starts at 0
                 (self.generation + 1) % self.save_interval == 0):
-            self.save_plot()
+            self.save_plots()
 
-        # Redraw the plot
+        # Redraw both plots
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
+        self.fig2.canvas.draw()
+        self.fig2.canvas.flush_events()
+        plt.pause(0.01)
 
-    def save_plot(self):
-        """Save the current plot to a file with timestamp."""
-        # Create directory if needed
+    def save_plots(self):
+        """Save both population and species fitness plots."""
         os.makedirs(self.plot_dir, exist_ok=True)
 
-        # remove all older plots, data is allways updated in the new plot
-        last_files = [x for x in Path(self.plot_dir).iterdir()]
-        for file in last_files:
-            os.remove(file)
+        # Remove previous plots
+        for file in Path(self.plot_dir).iterdir():
+            if file.is_file():
+                os.remove(file)
 
-        # Generate filename with timestamp and generation number
         timestamp = datetime.now().strftime("%Y%m%d_%H-%M-%S")
-        filename = os.path.join(self.plot_dir, f"{self.plot_filename_prefix}_{timestamp}_gen_{self.generation}.png")
 
-        # Save as high-resolution PNG
-        self.fig.savefig(filename, dpi=300, bbox_inches='tight')
-        print(f"\nSaved plot to {filename}")
+        # Save population fitness plot
+        pop_filename = os.path.join(
+            self.plot_dir,
+            f"{self.plot_filename_prefix}_{timestamp}_gen_{self.generation}.png"
+        )
+        self.fig.savefig(pop_filename, dpi=300, bbox_inches='tight')
+        print(f"Saved population fitness plot to {pop_filename}")
+
+        # Save species fitness plot
+        species_filename = os.path.join(
+            self.plot_dir,
+            f"species_{self.plot_filename_prefix}_{timestamp}_gen_{self.generation}.png"
+        )
+        self.fig2.savefig(species_filename, dpi=300, bbox_inches='tight')
+        print(f"Saved species fitness plot to {species_filename}")
 
     def complete_extinction(self):
         self.num_extinctions += 1
