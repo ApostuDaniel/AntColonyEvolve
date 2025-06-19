@@ -94,11 +94,11 @@ def params(version):
     return {
         "initial_depth": 0 if version == "S" else 1 if version == "M" else 2,
         "max_depth": 1 if version == "S" else 2 if version == "M" else 3,
-        "variance_threshold": 0.03,
-        "band_threshold": 0.3,
-        "iteration_level": 1,
-        "division_threshold": 0.5,
-        "max_weight": 8.0,
+        "variance_threshold": 0.04,
+        "band_threshold": 0.35,
+        "iteration_level": 2,
+        "division_threshold": 0.55,
+        "max_weight": 6.0,
         "activation": "tanh"
     }
 

@@ -620,7 +620,7 @@ class Ant():
         if self.in_nest:
             self.current_energy = ANT_LIFE
             return
-        health_lost = speed_penalty_square(self.speed)
+        health_lost = speed_penalty_square(self.speed) + int(self.wall_collision) # decrease extra if colliding with wall
         if self.carried_food >= health_lost:
             self.carried_food -= health_lost
         else:
@@ -849,7 +849,7 @@ class AntColonyEnv(ParallelEnv):
             return -100
 
         nest_reward = self.nest.food_register.get(agent, 0)
-        reward = (nest_reward * 7) + ant.current_food / 5 - int(ant.wall_collision)
+        reward = (nest_reward * 7) + ant.current_food / 5
         ant.total_reward += reward
 
         return reward
@@ -1312,7 +1312,7 @@ class AntColonyEnv(ParallelEnv):
 
 
 if __name__ == "__main__":
-    env = AntColonyEnv(render_mode='human', nr_of_ants=20)
+    env = AntColonyEnv(render_mode='human', nr_of_ants=1, nr_of_food=20)
 
     total_reward = 0
     observations, infos = env.reset()
@@ -1333,10 +1333,10 @@ if __name__ == "__main__":
                         done = True
                     if event.key == pygame.K_r:
                         env.reset()
-                    if event.key == pygame.K_UP:    manual_action[0:3] = [0.5, 0.0, 0.0]
-                    if event.key == pygame.K_DOWN:  manual_action[0:3] = [-0.5, 0.0, 0.0]
-                    if event.key == pygame.K_LEFT:  manual_action[1], manual_action[2] = 0.7, 0.0
-                    if event.key == pygame.K_RIGHT: manual_action[1], manual_action[2] = 0.0, 0.7
+                    if event.key == pygame.K_UP:    manual_action[0:3] = [0.1, 0.0, 0.0]
+                    if event.key == pygame.K_DOWN:  manual_action[0:3] = [-0.1, 0.0, 0.0]
+                    if event.key == pygame.K_LEFT:  manual_action[1], manual_action[2] = 0.5, 0.0
+                    if event.key == pygame.K_RIGHT: manual_action[1], manual_action[2] = 0.0, 0.5
                 elif event.type == pygame.KEYUP:
                     if event.key == pygame.K_UP:    manual_action[0] = 0.0
                     if event.key == pygame.K_DOWN:  manual_action[0] = 0.0
