@@ -617,12 +617,11 @@ class Ant():
         Refresh energy if ant in nest
         :return:
         '''
-        # if self.in_nest:
-        #     self.current_energy = ANT_LIFE
-        #     return
-        # health_lost = speed_penalty_square(self.speed) + int(self.wall_collision) # decrease extra if colliding with wall
-        health_lost = speed_penalty_square(self.speed)
+        if self.in_nest and self.current_energy < ANT_LIFE:
+            self.current_energy = min(ANT_LIFE, int(self.current_energy + (ANT_LIFE / 45)))
+            return
 
+        health_lost = speed_penalty_square(self.speed) + int(self.wall_collision) # decrease extra if colliding with wall
         if self.carried_food >= health_lost:
             self.carried_food -= health_lost
         else:
@@ -680,8 +679,8 @@ class Ant():
 
         # Initialize the observation vector with basic state information
         result = [
-            r_norm,  # Normalized radial position
-            theta_norm,  # Normalized angular position
+            # r_norm,  # Normalized radial position
+            # theta_norm,  # Normalized angular position
             self.speed / AGENT_SPEED,  # Normalized current speed
             self.theta / (2 * math.pi),  # Normalized current orientation
             self.current_energy / ANT_LIFE, # normalized health
@@ -700,10 +699,10 @@ class Ant():
 
         # Include the food density for each food detection area
 
-        # for segment_idx in range(len(vision_segments)):
-        #     # result.append(density_areas[segment_idx][0]['food'])
-        #     for range_idx in range(len(view_ranges)):
-        #         result.append(density_areas[segment_idx][range_idx]['food'])
+        for segment_idx in range(len(vision_segments)):
+            # result.append(density_areas[segment_idx][0]['food'])
+            for range_idx in range(len(view_ranges)):
+                result.append(density_areas[segment_idx][range_idx]['food'])
 
         return result
 
@@ -803,8 +802,8 @@ class AntColonyEnv(ParallelEnv):
         float_max = np.finfo(np.float32).max
         float_min = np.finfo(np.float32).min
         env_obs_spaces = {
-            'r_norm': Box(0.0,1.0),
-            'theta_norm': Box(-1.0, 1.0),
+            # 'r_norm': Box(0.0,1.0),
+            # 'theta_norm': Box(-1.0, 1.0),
             'speed': Box(-1., 1., (1,), np.float32),
             'theta': Box(0.0, 1., (1,), np.float32),
             "current_energy": Box(0., 1., (1, ) , np.float32),
@@ -815,7 +814,7 @@ class AntColonyEnv(ParallelEnv):
             'vision_segments_wall_distances': Box(0.0, 1.0, (len(vision_segments), np.float32)),
             'vision_segments_food_distances': Box(0.0, 1.0,(len(vision_segments), np.float32)),
             'vision_segments_food_angles': Box(-1.0, 1., (len(vision_segments),)),
-            # 'density_areas': Box(0.0, 1.0,(len(vision_segments) * len(view_ranges),)),
+            'density_areas': Box(0.0, 1.0,(len(vision_segments) * len(view_ranges),)),
             # used when testing just the closest density sensors
             # 'density_areas': Box(0.0, 1.0, (len(vision_segments),)),
         }
