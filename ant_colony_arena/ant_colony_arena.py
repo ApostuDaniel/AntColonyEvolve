@@ -28,8 +28,8 @@ logger.addHandler(handler)
 
 SIM_FPS = 60  # Simulation environment FPS
 
-SCREEN_W = 1200
-SCREEN_H = 1200
+SCREEN_W = 900
+SCREEN_H = 900
 BOUNDARY_SCALE = 0.02
 
 vec2d = namedtuple('vec2d', ['x', 'y'])
@@ -37,14 +37,14 @@ arena_sizes = namedtuple('arena_sizes', ['arena_center', 'arena_radius'])
 
 # Global parameters for agent control
 TIMESTEP = 1. / SIM_FPS  # Not sure if this will be necessary, given the fixed FPS?
-TIME_LIMIT = SIM_FPS * 10  # 10 seconds
+TIME_LIMIT = SIM_FPS * 12  # 12 seconds
 
 ANT_DIM = vec2d(5, 5)
-AGENT_SPEED = 20.00  # Maximum ant speed observed in data (pixels)
-AGENT_ACCELERATION = 10.00
+AGENT_SPEED = 15.00  # Maximum ant speed observed in data (pixels)
+AGENT_ACCELERATION = 7.00
 TURN_RATE = 0.3575  # Maximum turning rate observed in data (radians)
 
-NEST_RADIUS = 50
+NEST_RADIUS = SCREEN_W / 20
 
 SPEED_PENALTY_BASE = 1.5 ** (1 / AGENT_SPEED)
 
@@ -54,7 +54,7 @@ MIN_VISION_RANGE = 30
 
 MAX_FOOD_QUANTITY = 50
 FOOD_SIZE_SCALING = 0.5
-ANT_CARRY_CAPACITY = 50
+ANT_CARRY_CAPACITY = 60
 ANT_LIFE = 150
 
 DRAW_ANT_VISION = True
@@ -617,10 +617,11 @@ class Ant():
         Refresh energy if ant in nest
         :return:
         '''
-        if self.in_nest:
-            self.current_energy = ANT_LIFE
+        if self.in_nest and self.current_energy < ANT_LIFE:
+            self.current_energy = min(ANT_LIFE, int(self.current_energy + (ANT_LIFE / 45)))
             return
-        health_lost = speed_penalty_square(self.speed)
+
+        health_lost = speed_penalty_square(self.speed) + int(self.wall_collision) # decrease extra if colliding with wall
         if self.carried_food >= health_lost:
             self.carried_food -= health_lost
         else:
@@ -678,8 +679,8 @@ class Ant():
 
         # Initialize the observation vector with basic state information
         result = [
-            r_norm,  # Normalized radial position
-            theta_norm,  # Normalized angular position
+            # r_norm,  # Normalized radial position
+            # theta_norm,  # Normalized angular position
             self.speed / AGENT_SPEED,  # Normalized current speed
             self.theta / (2 * math.pi),  # Normalized current orientation
             self.current_energy / ANT_LIFE, # normalized health
@@ -698,10 +699,10 @@ class Ant():
 
         # Include the food density for each food detection area
 
-        # for segment_idx in range(len(vision_segments)):
-        #     # result.append(density_areas[segment_idx][0]['food'])
-        #     for range_idx in range(len(view_ranges)):
-        #         result.append(density_areas[segment_idx][range_idx]['food'])
+        for segment_idx in range(len(vision_segments)):
+            # result.append(density_areas[segment_idx][0]['food'])
+            for range_idx in range(len(view_ranges)):
+                result.append(density_areas[segment_idx][range_idx]['food'])
 
         return result
 
@@ -750,7 +751,7 @@ def speed_penalty_square(speed):
     :param speed: agents current abs speed
     :return: how much the reward should diminish
     """
-    return (abs(speed) ** 2) / (AGENT_SPEED * (AGENT_SPEED * 0.9))
+    return ((abs(speed) ** 2) / (AGENT_SPEED ** 2)) / 3
 
 class AntColonyEnv(ParallelEnv):
     metadata = {
@@ -801,8 +802,8 @@ class AntColonyEnv(ParallelEnv):
         float_max = np.finfo(np.float32).max
         float_min = np.finfo(np.float32).min
         env_obs_spaces = {
-            'r_norm': Box(0.0,1.0),
-            'theta_norm': Box(-1.0, 1.0),
+            # 'r_norm': Box(0.0,1.0),
+            # 'theta_norm': Box(-1.0, 1.0),
             'speed': Box(-1., 1., (1,), np.float32),
             'theta': Box(0.0, 1., (1,), np.float32),
             "current_energy": Box(0., 1., (1, ) , np.float32),
@@ -813,7 +814,7 @@ class AntColonyEnv(ParallelEnv):
             'vision_segments_wall_distances': Box(0.0, 1.0, (len(vision_segments), np.float32)),
             'vision_segments_food_distances': Box(0.0, 1.0,(len(vision_segments), np.float32)),
             'vision_segments_food_angles': Box(-1.0, 1., (len(vision_segments),)),
-            # 'density_areas': Box(0.0, 1.0,(len(vision_segments) * len(view_ranges),)),
+            'density_areas': Box(0.0, 1.0,(len(vision_segments) * len(view_ranges),)),
             # used when testing just the closest density sensors
             # 'density_areas': Box(0.0, 1.0, (len(vision_segments),)),
         }
@@ -849,7 +850,7 @@ class AntColonyEnv(ParallelEnv):
             return -100
 
         nest_reward = self.nest.food_register.get(agent, 0)
-        reward = (nest_reward * 7) + ant.current_food / 5 - int(ant.wall_collision)
+        reward = nest_reward * 3 + ant.current_food
         ant.total_reward += reward
 
         return reward
@@ -874,12 +875,17 @@ class AntColonyEnv(ParallelEnv):
 
     def _respawn_food(self):
         rng = np.random.default_rng()
-        max_food_draw_radius = self.ant_arena.arena_radius * 0.80 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING) * 2
+        # max_food_draw_radius = self.ant_arena.arena_radius * 0.80 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING) * 2
+        max_food_draw_radius = self.nest.radius * 8 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING) * 2
 
         def get_rand_food_params():
-            x, y = rng.uniform(-max_food_draw_radius, max_food_draw_radius, size=2)
-            quantity = int(rng.uniform(MAX_FOOD_QUANTITY - 10, MAX_FOOD_QUANTITY))
-            return int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y), quantity
+            while True:
+                x, y = rng.uniform(-max_food_draw_radius, max_food_draw_radius, size=2)
+                quantity = int(rng.uniform(MAX_FOOD_QUANTITY - 10, MAX_FOOD_QUANTITY))
+                # return int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y), quantity
+                x, y = int(self.nest.pos.x + x), int(self.nest.pos.y + y)
+                if is_rectangle_in_circle(x, y, self.ant_arena.arena_center, self.ant_arena.arena_radius):
+                    return x, y, quantity
 
         if self.food_sources is None or len(self.food_sources) == 0:
             self.food_sources = []
@@ -921,14 +927,14 @@ class AntColonyEnv(ParallelEnv):
         x, y = (int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y))
         self.nest = Nest((x, y), NEST_RADIUS)
 
-        # spawn ants around nest
-        max_ant_draw_radius = self.nest.radius * 3
+        # spawn ants in nest
+        max_ant_draw_radius = self.nest.radius
         for agent in self.agents:
             while True:
                 x, y = rng.uniform(-max_ant_draw_radius, max_ant_draw_radius, size=2)
                 x, y = (int(self.nest.pos.x + x), int(self.nest.pos.y + y))
                 theta = rng.uniform(0.0, 2 * math.pi)
-                if is_rectangle_in_circle(x, y, self.ant_arena.arena_center, self.ant_arena.arena_radius):
+                if is_rectangle_in_circle(x, y, self.nest.pos, self.nest.radius):
                     self.ants[agent] = Ant((x, y), theta)
                     break
 
@@ -1312,7 +1318,7 @@ class AntColonyEnv(ParallelEnv):
 
 
 if __name__ == "__main__":
-    env = AntColonyEnv(render_mode='human', nr_of_ants=20)
+    env = AntColonyEnv(render_mode='human', nr_of_ants=1, nr_of_food=20)
 
     total_reward = 0
     observations, infos = env.reset()
@@ -1333,10 +1339,10 @@ if __name__ == "__main__":
                         done = True
                     if event.key == pygame.K_r:
                         env.reset()
-                    if event.key == pygame.K_UP:    manual_action[0:3] = [0.5, 0.0, 0.0]
-                    if event.key == pygame.K_DOWN:  manual_action[0:3] = [-0.5, 0.0, 0.0]
-                    if event.key == pygame.K_LEFT:  manual_action[1], manual_action[2] = 0.7, 0.0
-                    if event.key == pygame.K_RIGHT: manual_action[1], manual_action[2] = 0.0, 0.7
+                    if event.key == pygame.K_UP:    manual_action[0:3] = [0.1, 0.0, 0.0]
+                    if event.key == pygame.K_DOWN:  manual_action[0:3] = [-0.1, 0.0, 0.0]
+                    if event.key == pygame.K_LEFT:  manual_action[1], manual_action[2] = 0.5, 0.0
+                    if event.key == pygame.K_RIGHT: manual_action[1], manual_action[2] = 0.0, 0.5
                 elif event.type == pygame.KEYUP:
                     if event.key == pygame.K_UP:    manual_action[0] = 0.0
                     if event.key == pygame.K_DOWN:  manual_action[0] = 0.0
