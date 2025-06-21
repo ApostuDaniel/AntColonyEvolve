@@ -38,10 +38,10 @@ from ant_evolution import VERSION, params, SUBSTRATE
 # SUBSTRATE = Substrate(INPUT_COORDINATES, OUTPUT_COORDINATES)
 
 if __name__ == "__main__":
-    env = ant_arena.AntColonyEnv(1, 25, render_mode='human')
+    env = ant_arena.AntColonyEnv(1, 13, render_mode='human')
     env.reset()
 
-    best_agent_file="./alg_runs/run_2025-06-19_16-48-43_1_net_1_env_single/es_hyperneat_ant_evolution_medium_cppn.pkl"
+    best_agent_file="./alg_runs/run_2025-06-21_02-05-29_singe_net_per_env_with_nest_rewards/es_hyperneat_ant_evolution_medium_cppn.pkl"
     CPPN = []
     with open(best_agent_file, 'rb') as file:
         CPPN = pickle.load(file)
@@ -54,6 +54,7 @@ if __name__ == "__main__":
         observations, infos = env.reset()
         terminations = [False]
         truncations = [False]
+        total_reward = 0
         while env.agents and not (all(terminations) or any(truncations)):
             outputs = []
             for agent in env.agents:
@@ -69,3 +70,5 @@ if __name__ == "__main__":
             observations, rewards, terminations, truncations, infos = env.step(actions)
             terminations = [terminations[a] for a in terminations]
             truncations = [truncations[a] for a in truncations]
+            total_reward += sum(rewards.values())
+        print(f"Average env fitness: {total_reward / len(agent_nets)}")
