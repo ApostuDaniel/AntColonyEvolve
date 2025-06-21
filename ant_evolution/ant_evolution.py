@@ -20,6 +20,7 @@ from pureples.es_hyperneat.es_hyperneat import ESNetwork
 import concurrent.futures
 import multiprocessing
 from functools import partial
+import itertools
 
 # S, M or L; Small, Medium or Large (logic implemented as "Not 'S' or 'M' then Large").
 VERSION = "M"
@@ -172,7 +173,6 @@ def _run_one_env(index, network, env):
     :param env: the environment to be run
     :return:
     """
-    nr_of_agents = len(env.agents)
     # Make as many nets as there are agents in the env
     nets = [network.create_phenotype_network() for _ in env.agents]
     # Reset network states
@@ -181,6 +181,7 @@ def _run_one_env(index, network, env):
 
     # We do this because sometimes len of networks is smaller than len of agents
     observations, infos = env.reset()
+    nr_of_agents = len(env.agents)
     terminations = {"placeholder": False}
     truncations = {"placeholder": False}
     reward = 0
@@ -215,16 +216,19 @@ def run_es(gens, env_fun, trials, max_steps, config, params, substrate, single_n
 
     if single_network_env:
         # create an env for each genome
-        envs = [env_fun(agents_in_env) for _ in range(config.pop_size)]
+        envs = [env_fun(agents_in_env) for _ in range(config.pop_size * trials)]
     else:
         # Pre-create environments for all trials
         envs = [env_fun() for _ in range(trials)]
 
     def eval_fitness_parallel_envs(genomes, config):
 
-        curr_envs = envs[:len(genomes)]
+        curr_envs = envs[:len(genomes) * trials]
         cppns = [neat.nn.FeedForwardNetwork.create(g, config) for _, g in genomes]
-        networks = [ESNetwork(substrate, cppn, params) for cppn in cppns]
+
+        networks = []
+        for _ in range(trials):
+            networks.extend([ESNetwork(substrate, cppn, params) for cppn in cppns])
 
         # Prepare trial runner
         env_runner = partial(
@@ -234,13 +238,19 @@ def run_es(gens, env_fun, trials, max_steps, config, params, substrate, single_n
         # Run envs in parallel
         with concurrent.futures.ProcessPoolExecutor() as executor:
             # Map each environment to a net
-            futures = [executor.submit(env_runner, i, networks[i], curr_envs[i]) for i in range(len(genomes))]
+            futures = []
+            for j in range(trials):
+                offset = j * len(genomes)
+                futures.extend([executor.submit(env_runner, i, networks[offset + i], curr_envs[offset + i]) for i in range(len(genomes))])
             results = [f.result() for f in concurrent.futures.as_completed(futures)]
 
-        # ensure that the results are in order of the genome
+        # sort and group results by genome index, should be 'trials' results with the same index
+        #compute average for all trials
         results.sort(key=lambda x: x[0])
+        mean_trials_results = [(key, sum(num for _, num in value) / trials) for key, value in itertools.groupby(results, lambda x: x[0])]
+
         for i, (_, g) in enumerate(genomes):
-            g.fitness = results[i][1]
+            g.fitness = mean_trials_results[i][1]
 
     def eval_fitness(genomes, config):
 
@@ -313,8 +323,8 @@ def run(gens, env_fun, trials, version, single_network_env=True, agents_in_env=1
     return winner, stats
 
 def make_ant_env(ants_in_env=1):
-    # env = ant_arena.AntColonyEnv(ants_in_env, 25, render_mode='human')
-    env = ant_arena.AntColonyEnv(ants_in_env, 25)
+    # env = ant_arena.AntColonyEnv(ants_in_env, 13, render_mode='human')
+    env = ant_arena.AntColonyEnv(ants_in_env, 13)
     env.reset()
     return env
 
@@ -323,14 +333,14 @@ if __name__ == "__main__":
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.INFO)
 
-    run_specificity="1_net_1_env_single"
+    run_specificity="singe_net_per_env_with_nest_rewards"
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     current_run_directory = f"alg_runs/run_{timestamp}_{run_specificity}"
 
     # Run! Only relevant to look at the winner.
-    WINNER = run(100, make_ant_env, 3, VERSION, True, 1, False, os.path.join(current_run_directory, "plots"))[0]
+    WINNER = run(260, make_ant_env, 3, VERSION, True, 1, False, os.path.join(current_run_directory, "plots"))[0]
 
     os.makedirs(current_run_directory, exist_ok=True)
     # Save CPPN if wished reused and draw it + winner to file.
