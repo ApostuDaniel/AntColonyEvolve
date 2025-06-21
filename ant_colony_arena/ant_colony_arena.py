@@ -40,8 +40,8 @@ TIMESTEP = 1. / SIM_FPS  # Not sure if this will be necessary, given the fixed F
 TIME_LIMIT = SIM_FPS * 12  # 12 seconds
 
 ANT_DIM = vec2d(5, 5)
-AGENT_SPEED = 20.00  # Maximum ant speed observed in data (pixels)
-AGENT_ACCELERATION = 10.00
+AGENT_SPEED = 15.00  # Maximum ant speed observed in data (pixels)
+AGENT_ACCELERATION = 7.00
 TURN_RATE = 0.3575  # Maximum turning rate observed in data (radians)
 
 NEST_RADIUS = SCREEN_W / 20
@@ -54,7 +54,7 @@ MIN_VISION_RANGE = 30
 
 MAX_FOOD_QUANTITY = 50
 FOOD_SIZE_SCALING = 0.5
-ANT_CARRY_CAPACITY = 50
+ANT_CARRY_CAPACITY = 60
 ANT_LIFE = 150
 
 DRAW_ANT_VISION = True
@@ -617,10 +617,12 @@ class Ant():
         Refresh energy if ant in nest
         :return:
         '''
-        if self.in_nest:
-            self.current_energy = ANT_LIFE
-            return
-        health_lost = speed_penalty_square(self.speed) + int(self.wall_collision) # decrease extra if colliding with wall
+        # if self.in_nest:
+        #     self.current_energy = ANT_LIFE
+        #     return
+        # health_lost = speed_penalty_square(self.speed) + int(self.wall_collision) # decrease extra if colliding with wall
+        health_lost = speed_penalty_square(self.speed)
+
         if self.carried_food >= health_lost:
             self.carried_food -= health_lost
         else:
@@ -750,7 +752,7 @@ def speed_penalty_square(speed):
     :param speed: agents current abs speed
     :return: how much the reward should diminish
     """
-    return (abs(speed) ** 2) / (AGENT_SPEED * (AGENT_SPEED * 0.75))
+    return ((abs(speed) ** 2) / (AGENT_SPEED ** 2)) / 3
 
 class AntColonyEnv(ParallelEnv):
     metadata = {
@@ -849,7 +851,7 @@ class AntColonyEnv(ParallelEnv):
             return -100
 
         nest_reward = self.nest.food_register.get(agent, 0)
-        reward = (nest_reward * 7) + ant.current_food / 5
+        reward = nest_reward * 3 + ant.current_food
         ant.total_reward += reward
 
         return reward
@@ -874,12 +876,17 @@ class AntColonyEnv(ParallelEnv):
 
     def _respawn_food(self):
         rng = np.random.default_rng()
-        max_food_draw_radius = self.ant_arena.arena_radius * 0.80 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING) * 2
+        # max_food_draw_radius = self.ant_arena.arena_radius * 0.80 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING) * 2
+        max_food_draw_radius = self.nest.radius * 8 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING) * 2
 
         def get_rand_food_params():
-            x, y = rng.uniform(-max_food_draw_radius, max_food_draw_radius, size=2)
-            quantity = int(rng.uniform(MAX_FOOD_QUANTITY - 10, MAX_FOOD_QUANTITY))
-            return int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y), quantity
+            while True:
+                x, y = rng.uniform(-max_food_draw_radius, max_food_draw_radius, size=2)
+                quantity = int(rng.uniform(MAX_FOOD_QUANTITY - 10, MAX_FOOD_QUANTITY))
+                # return int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y), quantity
+                x, y = int(self.nest.pos.x + x), int(self.nest.pos.y + y)
+                if is_rectangle_in_circle(x, y, self.ant_arena.arena_center, self.ant_arena.arena_radius):
+                    return x, y, quantity
 
         if self.food_sources is None or len(self.food_sources) == 0:
             self.food_sources = []
@@ -921,14 +928,14 @@ class AntColonyEnv(ParallelEnv):
         x, y = (int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y))
         self.nest = Nest((x, y), NEST_RADIUS)
 
-        # spawn ants around nest
-        max_ant_draw_radius = self.nest.radius * 3
+        # spawn ants in nest
+        max_ant_draw_radius = self.nest.radius
         for agent in self.agents:
             while True:
                 x, y = rng.uniform(-max_ant_draw_radius, max_ant_draw_radius, size=2)
                 x, y = (int(self.nest.pos.x + x), int(self.nest.pos.y + y))
                 theta = rng.uniform(0.0, 2 * math.pi)
-                if is_rectangle_in_circle(x, y, self.ant_arena.arena_center, self.ant_arena.arena_radius):
+                if is_rectangle_in_circle(x, y, self.nest.pos, self.nest.radius):
                     self.ants[agent] = Ant((x, y), theta)
                     break
 
