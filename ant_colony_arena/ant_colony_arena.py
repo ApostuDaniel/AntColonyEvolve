@@ -5,6 +5,9 @@ import sys, math
 from collections import namedtuple
 
 import warnings
+
+import numpy
+
 warnings.filterwarnings("ignore",
                         message="pkg_resources is deprecated as an API",
                         category=UserWarning,
@@ -58,7 +61,7 @@ ANT_CARRY_CAPACITY = 60
 ANT_LIFE = 150
 
 DRAW_ANT_VISION = True
-# DRAW_PHEROMONES = False
+DRAW_PHEROMONES = True
 # OBSERVE_OTHERS = True  # Whether to include other ants in the simulation
 # LOAD_ANTS = True  # Whether to load real ant data or use empty list
 # LOAD_PHEROMONES = False  # Whether to load pheromone data or calculate in real-time
@@ -87,6 +90,12 @@ vision_segments = [
     # Sky blue, cool and calm
     ((math.pi / 6, math.pi / 2), (0, 0, 255), 'forward_r1'),
 ]
+
+PHEROMONE_DETECTION_RANGE = MIN_VISION_RANGE / 2
+PHEROMONE_TYPES = 3
+PHEROMONE_DECAY = 0.95
+PHEROMONE_DEPOSIT = 1.0
+MAX_DETECTABLE_PHEROMONE_CONCENTRATION = 2
 
 view_ranges = [MIN_VISION_RANGE, MIDDLE_VISION_RANGE, MAX_VISION_RANGE]
 
@@ -298,6 +307,10 @@ class Ant():
         self.arena_radius = arena_radius
         self.wall_collision = False
 
+        # Pheromone sensing per segment
+        self.pheromone_sensors = np.zeros((len(vision_segments), PHEROMONE_TYPES))  # 3 segments x 3 types
+        self.pheromone_deposit_type = None  # Current deposit type
+
     def _compute_distance_to_wall(self, angle):
         """
         Compute the normalized distance from the ant's current position to the arena wall
@@ -349,54 +362,6 @@ class Ant():
 
         return scaled_distance
 
-    # def _detect_distances(self, detected_ants):
-    #     """
-    #     Identify the distance to the wall of the arena and the distance to the nearest ant
-    #     in each cone of vision, scaling such that closer objects (walls or ants) are
-    #     closer to 1 and farther objects (or beyond the vision range) are closer to 0.
-
-    #     Parameters:
-    #     - detected_ants (dict): A dictionary mapping segment names to lists of detected ants.
-    #     """
-
-    #     for idx, (angle_range, _) in enumerate(vision_segments):
-    #         start_angle, stop_angle = angle_range
-    #         segment_name = self._get_segment_name(idx)
-
-    #         # Calculate the central angle of the vision segment
-    #         central_angle = (start_angle + stop_angle) / 2
-    #         # Adjust the central angle based on the agent's current orientation
-    #         central_angle = (self.theta + central_angle) % (2 * math.pi)
-
-    #         # Compute distance to the wall along the central angle
-    #         raw_wall_distance = self._compute_distance_to_wall(central_angle)
-
-    #         # Flip scaling for wall distances: Closer walls = 1, farther walls = scaled to 0
-    #         if raw_wall_distance is not None and raw_wall_distance <= self.vision_range:
-    #             wall_distance = max(1.0 - (raw_wall_distance / self.vision_range), 0.0)
-    #         else:
-    #             wall_distance = 0.0  # Default for no wall detection (out of range)
-
-    #         self.wall_distances[segment_name] = wall_distance
-
-    #         # Find the minimum distance to the nearest ant in this segment
-    #         ants_in_segment = detected_ants.get(segment_name, [])
-    #         if ants_in_segment:
-    #             distances = [
-    #                 math.sqrt((ant[0] - self.pos.x) ** 2 + (ant[1] - self.pos.y) ** 2)
-    #                 for ant in ants_in_segment
-    #             ]
-    #             raw_ant_distance = min(distances)
-    #         else:
-    #             raw_ant_distance = None  # Default for no ants in range
-
-    #         # Flip scaling for ant distances: Closer ants = 1, farther ants = scaled to 0
-    #         if raw_ant_distance is not None and raw_ant_distance <= self.vision_range:
-    #             ant_distance = max(1.0 - (raw_ant_distance / self.vision_range), 0.0)
-    #         else:
-    #             ant_distance = 0.0  # Default for no detection or out of range
-
-    #         self.nearest_ant_distances[segment_name] = ant_distance
 
     def _detect_distances(self, detected_food):
         """
@@ -488,6 +453,14 @@ class Ant():
 
         return distance, angle_to_nest, ant_in_nest
 
+    def _get_segment_boundaries(self):
+        segment_boundaries = []
+        for idx, (angle_range, _, _) in enumerate(vision_segments):
+            start = (self.theta + angle_range[0]) % (2 * math.pi)
+            stop = (self.theta + angle_range[1]) % (2 * math.pi)
+            segment_boundaries.append((start, stop, idx))
+        return segment_boundaries
+
     def _detect_nearby_food(self, food_sources):
         """
         Detects food sources within vision range and categorizes them into vision segments.
@@ -514,11 +487,7 @@ class Ant():
         # Store food that can be eaten
         food_in_eating_range = []
         # Pre-calculate segment boundaries once
-        segment_boundaries = []
-        for idx, (angle_range, _, _) in enumerate(vision_segments):
-            start = (self.theta + angle_range[0]) % (2 * math.pi)
-            stop = (self.theta + angle_range[1]) % (2 * math.pi)
-            segment_boundaries.append((start, stop, idx))
+        segment_boundaries = self._get_segment_boundaries()
 
         # Process each food
         pos_x, pos_y = self.pos.x, self.pos.y
@@ -555,6 +524,83 @@ class Ant():
                         break
 
         return detected_food, density_areas, food_in_eating_range
+
+
+    def _detect_pheromones(self, pheromone_grid, cell_size):
+        """Detect pheromones in each vision segment"""
+        # Initialize sensor array: 3 segments x 3 pheromone types
+        sensors = np.zeros((len(vision_segments), PHEROMONE_TYPES))
+
+        if pheromone_grid is None:
+            return sensors
+
+        # Get grid position
+        grid_x = int(self.pos.x / cell_size)
+        grid_y = int(self.pos.y / cell_size)
+
+        # Calculate search range
+        max_range = PHEROMONE_DETECTION_RANGE
+        grid_range = int(max_range / cell_size) + 1
+
+        # Get grid bounds
+        min_i = max(0, grid_y - grid_range)
+        max_i = min(pheromone_grid.shape[0], grid_y + grid_range + 1)
+        min_j = max(0, grid_x - grid_range)
+        max_j = min(pheromone_grid.shape[1], grid_x + grid_range + 1)
+
+        # Pre-calculate segment boundaries once
+        segment_boundaries = self._get_segment_boundaries()
+
+        for i in range(min_i, max_i):
+            for j in range(min_j, max_j):
+                # Calculate world position of cell center
+                cell_x = (j + 0.5) * cell_size
+                cell_y = (i + 0.5) * cell_size
+
+                if not np.any(pheromone_grid[i, j]):
+                    continue
+
+                # Calculate vector from ant to cell
+                dx = cell_x - self.pos.x
+                dy = cell_y - self.pos.y
+                distance = math.sqrt(dx ** 2 + dy ** 2)
+
+                # Skip if beyond vision range
+                # skip if directly under ant
+                if distance > max_range or distance < ANT_DIM.x:
+                    continue
+
+                # # Calculate angle relative to ant's heading
+                # angle = math.atan2(dy, dx) - self.theta
+                # # Normalize angle to [-π, π]
+                # angle = (angle + math.pi) % (2 * math.pi) - math.pi
+
+                angle = math.atan2(dy, dx) % (2 * math.pi)
+
+                for start_angle, stop_angle, segment_idx in segment_boundaries:
+                    if start_angle < stop_angle:
+                        if start_angle <= angle <= stop_angle:
+                            sensors[segment_idx] += pheromone_grid[i, j]
+                            break
+                    elif angle >= start_angle or angle <= stop_angle:
+                        # Angle wraps around 2π boundary
+                        sensors[segment_idx] += pheromone_grid[i, j]
+                        break
+
+                # # Determine which segment the cell is in
+                # segment_idx = None
+                # if -math.pi / 2 <= angle <= -math.pi / 6:
+                #     segment_idx = 0  # Left segment
+                # elif -math.pi / 6 < angle < math.pi / 6:
+                #     segment_idx = 1  # Center segment
+                # elif math.pi / 6 <= angle <= math.pi / 2:
+                #     segment_idx = 2  # Right segment
+                #
+                # if segment_idx is not None:
+                #     # Add pheromone values to the corresponding segment
+                #     sensors[segment_idx] += pheromone_grid[i, j]
+
+        return sensors
 
     def get_polar_position(self):
         """
@@ -628,6 +674,27 @@ class Ant():
             self.current_energy -= (health_lost - self.carried_food)
             self.carried_food = 0
 
+    def place_pheromone(self, pheromone_action, pheromone_grid, grid_width, grid_height, cell_size):
+        grid_x = int(self.pos.x / cell_size)
+        grid_y = int(self.pos.y / cell_size)
+
+        if 0 <= grid_x < grid_width and 0 <= grid_y < grid_height:
+            # Determine deposit type based on action value
+            if pheromone_action < -0.5:
+                # No deposit
+                self.pheromone_deposit_type = None
+            elif pheromone_action < 0:
+                # Type 1 (red)
+                pheromone_grid[grid_y, grid_x, 0] = PHEROMONE_DEPOSIT
+                self.pheromone_deposit_type = 0
+            elif pheromone_action < 0.5:
+                # Type 2 (green)
+                pheromone_grid[grid_y, grid_x, 1] = PHEROMONE_DEPOSIT
+                self.pheromone_deposit_type = 1
+            else:
+                # Type 3 (blue)
+                pheromone_grid[grid_y, grid_x, 2] = PHEROMONE_DEPOSIT
+                self.pheromone_deposit_type = 2
 
     def set_action(self, action):
         acceleration, turn_left, turn_right = action
@@ -649,7 +716,7 @@ class Ant():
 
         return [acceleration, turn_left, turn_right]
 
-    def get_obs(self, food_sources=None, nest=None):
+    def get_obs(self, food_sources=None, nest=None, pheromone_grid=None, cell_size=None):
         """
         Generate the observation vector for the neural network, incorporating
         composite scores that encode both wall and ant distances for each vision segment.
@@ -666,6 +733,13 @@ class Ant():
             self.food_in_eating_range = food_in_eating_range
             self.density_areas = self._normalize_food_density(density_areas, MAX_FOOD_QUANTITY)
             self._detect_distances(detected_food)
+        # Add pheromone sensor values (flattened: 3 segments * 3 types = 9 values)
+        if pheromone_grid is not None and cell_size is not None:
+            self.pheromone_sensors = self._detect_pheromones(pheromone_grid, cell_size)
+            # clip value to max detectable
+            numpy.clip(self.pheromone_sensors, 0, MAX_DETECTABLE_PHEROMONE_CONCENTRATION)
+            #normalize concentrations
+            self.pheromone_sensors /= MAX_DETECTABLE_PHEROMONE_CONCENTRATION
 
         if nest is not None:
             (nest_distance, nest_angle, ant_in_nest) = self._detect_nest(nest)
@@ -703,6 +777,8 @@ class Ant():
             # result.append(density_areas[segment_idx][0]['food'])
             for range_idx in range(len(view_ranges)):
                 result.append(density_areas[segment_idx][range_idx]['food'])
+
+        result.extend(self.pheromone_sensors.flatten())
 
         return result
 
@@ -794,6 +870,13 @@ class AntColonyEnv(ParallelEnv):
         # circular arena
         self.ant_arena = arena_sizes( vec2d(arena_center[0], arena_center[1]), arena_radius)
 
+        # Pheromone grid setup
+        self.cell_size = ANT_DIM.x  # pheromone is ant size
+        self.grid_width = int(SCREEN_W / self.cell_size)
+        self.grid_height = int(SCREEN_H / self.cell_size)
+        self.pheromone_grid = np.zeros((self.grid_height, self.grid_width, PHEROMONE_TYPES),
+                                       dtype=np.float32)
+
     # Observation space should be defined here.
     # lru_cache allows observation and action spaces to be memoized, reducing clock cycles required to get each agent's space.
     # If your spaces change over time, remove this line (disable caching).
@@ -815,6 +898,7 @@ class AntColonyEnv(ParallelEnv):
             'vision_segments_food_distances': Box(0.0, 1.0,(len(vision_segments), np.float32)),
             'vision_segments_food_angles': Box(-1.0, 1., (len(vision_segments),)),
             'density_areas': Box(0.0, 1.0,(len(vision_segments) * len(view_ranges),)),
+            'pheromone_sensors': Box(0.0, 1.0,(len(vision_segments) * PHEROMONE_TYPES,)),
             # used when testing just the closest density sensors
             # 'density_areas': Box(0.0, 1.0, (len(vision_segments),)),
         }
@@ -825,7 +909,7 @@ class AntColonyEnv(ParallelEnv):
     # If your spaces change over time, remove this line (disable caching).
     @functools.lru_cache(maxsize=None)
     def action_space(self, agent):
-        return Box(-1.0, 1.0, (3,), dtype=np.float32)
+        return Box(-1.0, 1.0, (4,), dtype=np.float32)
 
     def seed(self, seed=None):
         return seeding.np_random(seed)
@@ -855,8 +939,8 @@ class AntColonyEnv(ParallelEnv):
 
         return reward
 
-    def get_observations(self, others=None, nest=None):
-        return {a: self.ants[a].get_obs(others, nest) for a in self.agents}
+    def get_observations(self, others=None, nest=None, pheromone_grid=None, cell_size=None):
+        return {a: self.ants[a].get_obs(others, nest, pheromone_grid, cell_size) for a in self.agents}
 
     def _track_trail(self, pos: vec2d):
         self.ant_trail.append(pos)
@@ -952,11 +1036,14 @@ class AntColonyEnv(ParallelEnv):
         # spawn food
         self._respawn_food()
 
+        self.pheromone_grid = np.zeros((self.grid_height, self.grid_width, PHEROMONE_TYPES),
+                                       dtype=np.float32)
+
         self.terminations = {agent: False for agent in self.agents}
         self.truncations = {agent: False for agent in self.agents}
 
         if self.food_sources is not None:
-            observations = self.get_observations(self.food_sources, self.nest)
+            observations = self.get_observations(self.food_sources, self.nest, self.pheromone_grid, self.cell_size)
         else:
             observations = self.get_observations()
 
@@ -986,10 +1073,14 @@ class AntColonyEnv(ParallelEnv):
         if self.render_mode == "human":
             self._render_frame
 
+        # Apply pheromone decay
+        self.pheromone_grid *= PHEROMONE_DECAY
+
         self._respawn_food()
         for agent, action in actions.items():
-            self.ants[agent].set_action(action)
+            self.ants[agent].set_action(action[:3])
             self.ants[agent].update()
+            self.ants[agent].place_pheromone(action[3], self.pheromone_grid, self.grid_width, self.grid_height, self.cell_size)
             self.ants[agent].handle_food(self.food_sources, self.nest, agent)
             self.ants[agent].handle_health()
         self.t += 1
@@ -1002,7 +1093,7 @@ class AntColonyEnv(ParallelEnv):
 
         # Get observations of other ants in the arena
         if self.food_sources is not None:
-            observations = self.get_observations(self.food_sources, self.nest)
+            observations = self.get_observations(self.food_sources, self.nest, self.pheromone_grid, self.cell_size)
         else:
             observations = self.get_observations()
 
@@ -1039,25 +1130,7 @@ class AntColonyEnv(ParallelEnv):
         # if self.render_mode == 'rgb_array':
         return self._render_frame
 
-    @property
-    def _render_frame(self):
-        if self.window is None and self.render_mode == 'human':
-            pygame.init()
-            pygame.display.init()
-            pygame.display.set_caption('Ant Colony Evolution')
-            self.window = pygame.display.set_mode(
-                (SCREEN_W, SCREEN_H)
-            )
-
-        if self.clock is None and self.render_mode == 'human':
-            self.clock = pygame.time.Clock()
-            return
-
-        # Fill the canvas with purple as the outer background
-        canvas = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
-        canvas.fill((200, 190, 210))  # Outer purple background
-        font = pygame.font.SysFont('Arial', 9)
-
+    def draw_arena(self, canvas: pygame.Surface):
         # Draw the circular arena on the canvas
         pygame.draw.circle(
             canvas,
@@ -1066,6 +1139,7 @@ class AntColonyEnv(ParallelEnv):
             int(self.ant_arena.arena_radius)  # Radius
         )
 
+    def highlight_best_ant(self, canvas: pygame.Surface):
         # Draw a glow around the best performing ant
         best_ant = max(self.agents, key=lambda agent: self.ants[agent].total_reward)
         best_ant = self.ants[best_ant]
@@ -1076,6 +1150,162 @@ class AntColonyEnv(ParallelEnv):
             MAX_VISION_RANGE
         )
 
+    def draw_pheromone_grid(self, canvas: pygame.Surface, render_pheromones=True, render_ant_grid_vision=True):
+        # Calculate arena bounding square
+        arena_center_x, arena_center_y = self.ant_arena.arena_center
+        arena_radius = self.ant_arena.arena_radius
+        bounding_left = arena_center_x - arena_radius
+        bounding_right = arena_center_x + arena_radius
+        bounding_top = arena_center_y - arena_radius
+        bounding_bottom = arena_center_y + arena_radius
+
+        # Calculate grid indices within bounding square
+        grid_left = max(0, int(bounding_left / self.cell_size))
+        grid_right = min(self.grid_width, int(bounding_right / self.cell_size) + 1)
+        grid_top = max(0, int(bounding_top / self.cell_size))
+        grid_bottom = min(self.grid_height, int(bounding_bottom / self.cell_size) + 1)
+
+        def draw_grid_lines():
+            # Draw grid lines only within the bounding square
+            grid_color = (100, 100, 100, 255)  # Semi-transparent gray
+
+            # Vertical lines
+            for i in range(grid_left, grid_right + 1):
+                x = int(i * self.cell_size)
+                pygame.draw.line(
+                    canvas,
+                    grid_color,
+                    (x, bounding_top),
+                    (x, bounding_bottom),
+                    1
+                )
+
+            # Horizontal lines
+            for j in range(grid_top, grid_bottom + 1):
+                y = int(j * self.cell_size)
+                pygame.draw.line(
+                    canvas,
+                    grid_color,
+                    (bounding_left, y),
+                    (bounding_right, y),
+                    1
+                )
+
+        def draw_pheromones():
+            # Draw pheromone concentrations only within bounding square
+            for i in range(grid_top, grid_bottom):
+                for j in range(grid_left, grid_right):
+                    pheromones = self.pheromone_grid[i, j]
+                    total_pheromone = np.sum(pheromones)
+
+                    if total_pheromone > 0.01:  # Only draw significant concentrations
+                        x = int((j + 0.5) * self.cell_size)
+                        y = int((i + 0.5) * self.cell_size)
+
+                        # Skip if outside arena circle
+                        dx = x - arena_center_x
+                        dy = y - arena_center_y
+                        distance = math.sqrt(dx ** 2 + dy ** 2)
+                        if distance > arena_radius:
+                            continue
+
+                        # Create blended color based on pheromone types
+                        r = min(255, int(pheromones[0] * 255))
+                        g = min(255, int(pheromones[1] * 255))
+                        b = min(255, int(pheromones[2] * 255))
+                        alpha = min(255, int(total_pheromone * 100))
+
+                        # Draw concentration circle
+                        pygame.draw.circle(
+                            canvas,
+                            (r, g, b, alpha),
+                            (x, y),
+                            int(self.cell_size / 2)
+                        )
+
+        def draw_ant_grid_vision():
+            for agent in self.agents:
+                ant = self.ants[agent]
+                # Get grid position
+                grid_x = int(ant.pos.x / self.cell_size)
+                grid_y = int(ant.pos.y / self.cell_size)
+
+                # Calculate search range
+                max_range = PHEROMONE_DETECTION_RANGE
+                grid_range = int(max_range / self.cell_size) + 1
+
+                # Get grid bounds
+                min_i = max(0, grid_y - grid_range)
+                max_i = min(self.pheromone_grid.shape[0], grid_y + grid_range + 1)
+                min_j = max(0, grid_x - grid_range)
+                max_j = min(self.pheromone_grid.shape[1], grid_x + grid_range + 1)
+
+                # Pre-calculate segment boundaries once
+                segment_boundaries = ant._get_segment_boundaries()
+
+                for i in range(min_i, max_i):
+                    for j in range(min_j, max_j):
+                        # Calculate world position of cell center
+                        cell_x = (j + 0.5) * self.cell_size
+                        cell_y = (i + 0.5) * self.cell_size
+
+                        colour = (0, 255, 0)
+                        if not np.any(self.pheromone_grid[i, j]):
+                            colour = (255, 0, 0)
+
+                        # Calculate vector from ant to cell
+                        dx = cell_x - ant.pos.x
+                        dy = cell_y - ant.pos.y
+                        distance = math.sqrt(dx ** 2 + dy ** 2)
+
+                        # Skip if beyond vision range
+                        # skip if directly under ant
+                        if distance > max_range or distance < ANT_DIM.x:
+                            continue
+
+                        # # Calculate angle relative to ant's heading
+                        # angle = math.atan2(dy, dx) - self.theta
+                        # # Normalize angle to [-π, π]
+                        # angle = (angle + math.pi) % (2 * math.pi) - math.pi
+
+                        angle = math.atan2(dy, dx) % (2 * math.pi)
+
+                        for start_angle, stop_angle, segment_idx in segment_boundaries:
+                            if start_angle < stop_angle:
+                                if start_angle <= angle <= stop_angle:
+                                    pygame.draw.rect(
+                                        canvas,
+                                        colour,
+                                        (
+                                            j * self.cell_size,
+                                            i * self.cell_size,
+                                            ANT_DIM.x,
+                                            ANT_DIM.x
+                                        )
+                                    )
+                                    break
+                            elif angle >= start_angle or angle <= stop_angle:
+                                # Angle wraps around 2π boundary
+                                pygame.draw.rect(
+                                    canvas,
+                                    colour,
+                                    (
+                                        j * self.cell_size,
+                                        i * self.cell_size,
+                                        ANT_DIM.x,
+                                        ANT_DIM.x
+                                    )
+                                )
+                                break
+
+        draw_grid_lines()
+        if render_ant_grid_vision:
+            draw_ant_grid_vision()
+        if render_pheromones:
+            draw_pheromones()
+
+
+    def draw_nest(self, canvas: pygame.Surface, font: pygame.font):
         ## DRAW NEST
         pygame.draw.circle(
             canvas,
@@ -1093,141 +1323,103 @@ class AntColonyEnv(ParallelEnv):
             (0, 0, 0)
         )
 
-        ### DRAW TRAILS FIRST
-
-        # Draw ant trail
-        trail_length = len(self.ant_trail)
-        if TRACK_TRAIL == 'all':
-            self.ant_trail_segment = self.ant_trail
-        elif TRACK_TRAIL == 'fade':
-            if trail_length > FADE_DURATION * SIM_FPS:
-                self.ant_trail_segment = self.ant_trail[trail_length - FADE_DURATION * SIM_FPS:]
-        else:
-            self.ant_trail_segment = []
-        for pos in self.ant_trail_segment:
-            pygame.draw.rect(
-                canvas,
-                (180, 180, 220),
-                (
-                    pos.x - ANT_DIM.x / 2.,
-                    pos.y - ANT_DIM.y / 2.,
-                    ANT_DIM.x,
-                    ANT_DIM.y
-                )
-            )
-
-        ### THEN DRAW FOOD SOURCES AT THEIR CURRENT POSITIONS
-
+    def draw_food(self, canvas: pygame.Surface):
         # Draw food positions and size
         if self.food_sources is not None:
-            try:
-                for food_source in self.food_sources:
-                    # scale down the food size
-                    food_size = int(max(2, food_source[2] * FOOD_SIZE_SCALING))
-                    pygame.draw.rect(
+            for food_source in self.food_sources:
+                # scale down the food size
+                food_size = int(max(2, food_source[2] * FOOD_SIZE_SCALING))
+                pygame.draw.rect(
+                    canvas,
+                    (180, 180, 180),
+                    (
+                        food_source[0] - food_size / 2.,
+                        food_source[1] - food_size / 2.,
+                        food_size,
+                        food_size
+                    )
+                )
+
+    def draw_ant_vision(self, canvas: pygame.Surface, font: pygame.font):
+        for segment_idx, ((angle_range_start, angle_range_end), colour, _) in enumerate(vision_segments):
+            for agent in self.agents:
+                ant = self.ants[agent]
+                # Calculate start and stop angles, normalized to 0 to 2*pi
+                start_angle = (ant.theta + angle_range_start) % (2 * math.pi)
+                stop_angle = (ant.theta + angle_range_end) % (2 * math.pi)
+                central_angle = (ant.theta + (angle_range_start + angle_range_end) / 2) % (2 * math.pi)
+
+                # Draw lines delimiting the vision segments
+                pygame.draw.line(
+                    canvas,
+                    colour,
+                    (int(ant.pos.x), int(ant.pos.y)),
+                    (
+                        int(ant.pos.x + np.cos(start_angle) * MAX_VISION_RANGE),
+                        int(ant.pos.y + np.sin(start_angle) * MAX_VISION_RANGE)
+                    )
+                )
+
+                pygame.draw.line(
+                    canvas,
+                    colour,
+                    (int(ant.pos.x), int(ant.pos.y)),
+                    (
+                        int(ant.pos.x + np.cos(stop_angle) * MAX_VISION_RANGE),
+                        int(ant.pos.y + np.sin(stop_angle) * MAX_VISION_RANGE)
+                    )
+                )
+
+                for vision_idx, view_range in enumerate(view_ranges):
+                    # compute distance to the center of each area
+                    draw_distance = view_range / 2 if vision_idx <= 0 \
+                        else view_ranges[vision_idx - 1] + (view_range - view_ranges[vision_idx - 1]) / 2
+                    # display number of entities in each density area
+                    self._draw_text(
                         canvas,
-                        (180, 180, 180),
-                        (
-                            food_source[0] - food_size / 2.,
-                            food_source[1] - food_size / 2.,
-                            food_size,
-                            food_size
-                        )
+                        font,
+                        int(ant.pos.x + np.cos(central_angle) * draw_distance),
+                        int(ant.pos.y + np.sin(central_angle) * draw_distance),
+                        f"{round(ant.density_areas[segment_idx][vision_idx]['food'], 2)}",
+                        (0, 0, 0)
                     )
 
-            except IndexError:
-                print(food_source)
-                logger.error("End of time series reached for other ants.")
-            except TypeError:
-                print(food_source)
-                logger.error("Cannot draw ant with provided coordinates.")
-
-        if DRAW_ANT_VISION:
-            for segment_idx, ((angle_range_start, angle_range_end), colour, _) in enumerate(vision_segments):
-                for agent in self.agents:
-                    ant = self.ants[agent]
-                    # Calculate start and stop angles, normalized to 0 to 2*pi
-                    start_angle = (ant.theta + angle_range_start) % (2 * math.pi)
-                    stop_angle = (ant.theta + angle_range_end) % (2 * math.pi)
-                    central_angle = (ant.theta + (angle_range_start + angle_range_end) / 2) % (2 * math.pi)
-
-                    # Draw lines delimiting the vision segments
-                    pygame.draw.line(
+                    # Draw arcs delimiting the vision ranges and density areas
+                    pygame.draw.arc(
                         canvas,
                         colour,
-                        (int(ant.pos.x), int(ant.pos.y)),
-                        (
-                            int(ant.pos.x + np.cos(start_angle) * MAX_VISION_RANGE),
-                            int(ant.pos.y + np.sin(start_angle) * MAX_VISION_RANGE)
-                        )
+                        (int(ant.pos.x - view_range), int(ant.pos.y - view_range), view_range * 2,
+                         view_range * 2),
+                        # To align to pygame where angles increase clockwise, we needed to inverse the values
+                        -stop_angle,
+                        -start_angle
                     )
 
-                    pygame.draw.line(
-                        canvas,
-                        colour,
-                        (int(ant.pos.x), int(ant.pos.y)),
-                        (
-                            int(ant.pos.x + np.cos(stop_angle) * MAX_VISION_RANGE),
-                            int(ant.pos.y + np.sin(stop_angle) * MAX_VISION_RANGE)
-                        )
-                    )
-
-                    for vision_idx, view_range in enumerate(view_ranges):
-                        # compute distance to the center of each area
-                        draw_distance =  view_range / 2 if vision_idx <= 0 \
-                            else view_ranges[vision_idx - 1] + (view_range - view_ranges[vision_idx - 1]) / 2
-                        # display number of entities in each density area
-                        self._draw_text(
-                            canvas,
-                            font,
-                            int(ant.pos.x + np.cos(central_angle) * draw_distance),
-                            int(ant.pos.y + np.sin(central_angle) * draw_distance),
-                            f"{round(ant.density_areas[segment_idx][vision_idx]['food'], 2)}",
-                            (0, 0, 0)
-                        )
-
-                        # Draw arcs delimiting the vision ranges and density areas
-                        pygame.draw.arc(
-                            canvas,
-                            colour,
-                            (int(ant.pos.x - view_range), int(ant.pos.y - view_range), view_range * 2,
-                             view_range * 2),
+                # draw arc for the pheromone detection range
+                view_range = PHEROMONE_DETECTION_RANGE
+                pygame.draw.arc(
+                    canvas,
+                    (255, 165, 0),# orange
+                    (int(ant.pos.x - view_range), int(ant.pos.y - view_range), view_range * 2,
+                     view_range * 2),
                     # To align to pygame where angles increase clockwise, we needed to inverse the values
-                            -stop_angle,
-                            -start_angle
-                        )
+                    -stop_angle,
+                    -start_angle
+                )
 
-        # Draw wall distance indicators
-        # for segment_idx, distance in self.ant.wall_distances.items():
-        #     if distance is not None:
-        #         # Calculate the central angle of the segment
-        #         angle_range, _ = vision_segments[segment_idx]
-        #         central_angle = (angle_range[0] + angle_range[1]) / 2
-        #         central_angle = (self.ant.theta + central_angle) % (2 * math.pi)
 
-        #         # Calculate end point based on wall distance
-        #         end_x = int(self.ant.pos.x + math.cos(central_angle) * distance)
-        #         end_y = int(self.ant.pos.y + math.sin(central_angle) * distance)
-
-        #         # Draw a line from the ant to the wall
-        #         pygame.draw.line(
-        #             canvas,
-        #             (255, 0, 0),  # Red color for wall distance
-        #             (int(self.ant.pos.x), int(self.ant.pos.y)),
-        #             (end_x, end_y),
-        #             1
-        #         )
-
+    def draw_ants(self, canvas: pygame.Surface, font: pygame.font):
         # Draw nearest ant distance indicators
         for agent in self.agents:
             ant = self.ants[agent]
             for segment_idx, distance in ant.nearest_food_distances.items():
                 angle = ant.nearest_food_angles[segment_idx]
+                angle = angle * (2 * math.pi) # denormalize angle, from (0, 1) interval
                 if distance is not None and distance != 1.0:
                     # Calculate the central angle of the segment
                     angle_range, segment_color, _ = vision_segments[segment_idx]
 
-                    # Calculate end point based on nearest ant distance
+                    # Calculate end point based on nearest food distance
                     end_x = int(ant.pos.x + math.cos(angle) * distance * MAX_VISION_RANGE)
                     end_y = int(ant.pos.y + math.sin(angle) * distance * MAX_VISION_RANGE)
 
@@ -1263,6 +1455,7 @@ class AntColonyEnv(ParallelEnv):
                     ANT_DIM.y
                 )
             )
+
             pygame.draw.line(
                 canvas,
                 (0, 0, 180),
@@ -1273,7 +1466,8 @@ class AntColonyEnv(ParallelEnv):
                 )
             )
 
-            backwards_l, backwards, backwards_r = ((ant.theta - math.pi + sign * math.pi / 3 ) % (2 * math.pi) for sign in [-1, 0, 1])
+            backwards_l, backwards, backwards_r = ((ant.theta - math.pi + sign * math.pi / 3) % (2 * math.pi) for sign
+                                                   in [-1, 0, 1])
             # draw current energy
             self._draw_text(
                 canvas,
@@ -1304,6 +1498,86 @@ class AntColonyEnv(ParallelEnv):
                 (0, 0, 0)
             )
 
+    @property
+    def _render_frame(self):
+        if self.window is None and self.render_mode == 'human':
+            pygame.init()
+            pygame.display.init()
+            pygame.display.set_caption('Ant Colony Evolution')
+            self.window = pygame.display.set_mode(
+                (SCREEN_W, SCREEN_H)
+            )
+
+        if self.clock is None and self.render_mode == 'human':
+            self.clock = pygame.time.Clock()
+            return
+
+        # Fill the canvas with purple as the outer background
+        canvas = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
+        canvas.fill((200, 190, 210))  # Outer purple background
+        font = pygame.font.SysFont('Arial', 9)
+
+        self.draw_arena(canvas)
+
+        self.highlight_best_ant(canvas)
+
+        self.draw_pheromone_grid(canvas, DRAW_PHEROMONES)
+
+        self.draw_nest(canvas, font)
+
+        ### DRAW TRAILS FIRST
+
+        # # Draw ant trail
+        # trail_length = len(self.ant_trail)
+        # if TRACK_TRAIL == 'all':
+        #     self.ant_trail_segment = self.ant_trail
+        # elif TRACK_TRAIL == 'fade':
+        #     if trail_length > FADE_DURATION * SIM_FPS:
+        #         self.ant_trail_segment = self.ant_trail[trail_length - FADE_DURATION * SIM_FPS:]
+        # else:
+        #     self.ant_trail_segment = []
+        # for pos in self.ant_trail_segment:
+        #     pygame.draw.rect(
+        #         canvas,
+        #         (180, 180, 220),
+        #         (
+        #             pos.x - ANT_DIM.x / 2.,
+        #             pos.y - ANT_DIM.y / 2.,
+        #             ANT_DIM.x,
+        #             ANT_DIM.y
+        #         )
+        #     )
+
+        ### THEN DRAW FOOD SOURCES AT THEIR CURRENT POSITIONS
+
+        self.draw_food(canvas)
+
+        if DRAW_ANT_VISION:
+            self.draw_ant_vision(canvas, font)
+
+        # Draw wall distance indicators
+        # for segment_idx, distance in self.ant.wall_distances.items():
+        #     if distance is not None:
+        #         # Calculate the central angle of the segment
+        #         angle_range, _ = vision_segments[segment_idx]
+        #         central_angle = (angle_range[0] + angle_range[1]) / 2
+        #         central_angle = (self.ant.theta + central_angle) % (2 * math.pi)
+
+        #         # Calculate end point based on wall distance
+        #         end_x = int(self.ant.pos.x + math.cos(central_angle) * distance)
+        #         end_y = int(self.ant.pos.y + math.sin(central_angle) * distance)
+
+        #         # Draw a line from the ant to the wall
+        #         pygame.draw.line(
+        #             canvas,
+        #             (255, 0, 0),  # Red color for wall distance
+        #             (int(self.ant.pos.x), int(self.ant.pos.y)),
+        #             (end_x, end_y),
+        #             1
+        #         )
+
+        self.draw_ants(canvas, font)
+
         if self.render_mode == 'human':
             self.window.blit(canvas, canvas.get_rect())
             pygame.event.pump()
@@ -1318,45 +1592,47 @@ class AntColonyEnv(ParallelEnv):
 
 
 if __name__ == "__main__":
-    env = AntColonyEnv(render_mode='human', nr_of_ants=1, nr_of_food=20)
+    env = AntColonyEnv(render_mode='human', nr_of_ants=3, nr_of_food=13)
 
-    total_reward = 0
-    observations, infos = env.reset()
+    while True:
+        total_reward = 0
+        observations, infos = env.reset()
 
-    manual_mode = True
-    manual_action = [0.0, 0.0, 0.0]
+        manual_mode = True
+        manual_action = [0.0, 0.0, 0.0, 0.5]
 
-    terminations = [False]
-    truncations = [False]
-    done = False
-    while env.agents and not any(terminations) and not any(truncations):
-        if manual_mode:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    done = True
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_ESCAPE:
+        terminations = [False]
+        truncations = [False]
+        done = False
+        while env.agents and not any(terminations) and not any(truncations):
+            if manual_mode:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
                         done = True
-                    if event.key == pygame.K_r:
-                        env.reset()
-                    if event.key == pygame.K_UP:    manual_action[0:3] = [0.1, 0.0, 0.0]
-                    if event.key == pygame.K_DOWN:  manual_action[0:3] = [-0.1, 0.0, 0.0]
-                    if event.key == pygame.K_LEFT:  manual_action[1], manual_action[2] = 0.5, 0.0
-                    if event.key == pygame.K_RIGHT: manual_action[1], manual_action[2] = 0.0, 0.5
-                elif event.type == pygame.KEYUP:
-                    if event.key == pygame.K_UP:    manual_action[0] = 0.0
-                    if event.key == pygame.K_DOWN:  manual_action[0] = 0.0
-                    if event.key == pygame.K_LEFT:  manual_action[1] = 0.0
-                    if event.key == pygame.K_RIGHT:  manual_action[2] = 0.0
+                    if event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_ESCAPE:
+                            done = True
+                        if event.key == pygame.K_r:
+                            env.reset()
+                        if event.key == pygame.K_UP:    manual_action[0:3] = [0.1, 0.0, 0.0]
+                        if event.key == pygame.K_DOWN:  manual_action[0:3] = [-0.1, 0.0, 0.0]
+                        if event.key == pygame.K_LEFT:  manual_action[1], manual_action[2] = 1.0, 0.0
+                        if event.key == pygame.K_RIGHT: manual_action[1], manual_action[2] = 0.0, 1.0
+                    elif event.type == pygame.KEYUP:
+                        if event.key == pygame.K_UP:    manual_action[0] = 0.0
+                        if event.key == pygame.K_DOWN:  manual_action[0] = 0.0
+                        if event.key == pygame.K_LEFT:  manual_action[1] = 0.0
+                        if event.key == pygame.K_RIGHT:  manual_action[2] = 0.0
 
-            actions = {agent: manual_action for agent in env.agents}
-        else:
-            actions = {agent: env.action_space(agent).sample() for agent in env.agents}
-        if done is True:
-            break
-        observations, rewards, terminations, truncations, infos = env.step(actions)
-        terminations = [terminations[a] for a in terminations]
-        truncations = [truncations[a] for a in truncations]
+                actions = {agent: manual_action for agent in env.agents}
+            else:
+                actions = {agent: env.action_space(agent).sample() for agent in env.agents}
+            if done is True:
+                break
+            observations, rewards, terminations, truncations, infos = env.step(actions)
+            total_reward += sum(rewards.values())
+            terminations = [terminations[a] for a in terminations]
+            truncations = [truncations[a] for a in truncations]
 
+        print('Cumulative score:', total_reward)
     env.close()
-    print('Cumulative score:', total_reward)
