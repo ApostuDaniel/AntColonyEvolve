@@ -10,7 +10,7 @@ from neat import StdOutReporter
 import ant_colony_arena.ant_colony_arena as ant_arena
 import neat
 
-from ant_colony_arena.ant_colony_arena import vision_segments, view_ranges
+from ant_colony_arena.ant_colony_arena import vision_segments, view_ranges, PHEROMONE_TYPES
 from utils.neat_plot_reporter import PlotReporter
 
 from pureples.shared.visualize import draw_net
@@ -63,8 +63,8 @@ INPUT_COORDINATES = [
     (0., -0.2), # current_energy
     (0., -0.25), # carried_food
     (0., -0.33), # ant_in_nest
-    (0., -0.36), # distance_to_nest
-    (0., -0.39), # angle_to_nest
+    # (0., -0.36), # distance_to_nest
+    # (0., -0.39), # angle_to_nest
     # (-1, -1.), (-0.5, -1.),(0, -1.), (0.5, -1.), (1, -1.), #vision_segments_wall_distances
     # (-1, -0.8), (-0.5, -0.8),(0, -0.8), (0.5, -0.8), (1, -0.8),  # vision_segments_food_distances
     # (-1, -0.7), (-0.5, -0.7),(0, -0.7), (0.5, -0.7), (1, -0.7),  # vision_segments_food_angles
@@ -81,14 +81,21 @@ INPUT_COORDINATES.extend([(x, -0.7) for x in vision_segments_x_coord]) #vision_s
 
 # provide density areas coordinates
 vision_ranges_y_coord = [-0.4 - 0.1 * i for i in range(len(view_ranges))]
-for y in vision_ranges_y_coord:
-    INPUT_COORDINATES.extend([(x, y) for x in vision_segments_x_coord])
+# for y in vision_ranges_y_coord:
+#     INPUT_COORDINATES.extend([(x, y) for x in vision_segments_x_coord])
+
+# provide pheromones coordinates
+for x in vision_segments_x_coord:
+    INPUT_COORDINATES.extend([(x, -0.6 - (i * 0.05)) for i in range(PHEROMONE_TYPES)])  # pheromone coordinates for each vision segment
+
+
 
 OUTPUT_COORDINATES = \
     [
-        (0, 0.5), # acceleration
+        (0., 0.5), # acceleration
         (-0.5, 0.5), # turn left
-        (0.5, 0.5) #turn_right
+        (0.5, 0.5), #turn_right
+        (0., 0.2) # pheromone type
     ]
 
 SUBSTRATE = Substrate(INPUT_COORDINATES, OUTPUT_COORDINATES)
@@ -329,7 +336,7 @@ def run(gens, env_fun, trials, version, single_network_env=True, agents_in_env=1
 
 def make_ant_env(ants_in_env=1):
     # env = ant_arena.AntColonyEnv(ants_in_env, 13, render_mode='human')
-    env = ant_arena.AntColonyEnv(ants_in_env, 13)
+    env = ant_arena.AntColonyEnv(ants_in_env, 7)
     env.reset()
     return env
 
@@ -338,14 +345,14 @@ if __name__ == "__main__":
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.INFO)
 
-    run_specificity="singe_net_per_env_with_nest_rewards"
+    run_specificity="pheromone_no_health_1_agent"
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     current_run_directory = f"alg_runs/run_{timestamp}_{run_specificity}"
 
     # Run! Only relevant to look at the winner.
-    WINNER = run(100, make_ant_env, 3, VERSION, True, 1, False, os.path.join(current_run_directory, "plots"))[0]
+    WINNER = run(20, make_ant_env, 3, VERSION, True, 7, False, os.path.join(current_run_directory, "plots"))[0]
 
     os.makedirs(current_run_directory, exist_ok=True)
     # Save CPPN if wished reused and draw it + winner to file.

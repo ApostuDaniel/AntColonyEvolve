@@ -38,10 +38,10 @@ from ant_evolution import VERSION, params, SUBSTRATE
 # SUBSTRATE = Substrate(INPUT_COORDINATES, OUTPUT_COORDINATES)
 
 if __name__ == "__main__":
-    env = ant_arena.AntColonyEnv(1, 13, render_mode='human')
+    env = ant_arena.AntColonyEnv(1, 7, render_mode='human')
     env.reset()
 
-    best_agent_file="./alg_runs/run_2025-06-21_16-43-16_singe_net_per_env_with_nest_rewards/es_hyperneat_ant_evolution_medium_cppn.pkl"
+    best_agent_file="./alg_runs/run_2025-06-24_16-51-09_pheromone_no_health_1_agent/es_hyperneat_ant_evolution_medium_cppn.pkl"
     CPPN = []
     with open(best_agent_file, 'rb') as file:
         CPPN = pickle.load(file)
