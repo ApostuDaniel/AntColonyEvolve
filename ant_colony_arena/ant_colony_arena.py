@@ -361,11 +361,9 @@ class Ant():
                     key=lambda x: x[0],
                     default=None
                 )
-                # reestablish it to be the distance to the food centre
-                raw_food_distance += food_radius
 
-                if raw_food_distance is not None and raw_food_distance <= self.vision_range + food_radius:
-                    food_distance_scaled = raw_food_distance / (self.vision_range + food_radius)
+                if raw_food_distance is not None and raw_food_distance <= self.vision_range:
+                    food_distance_scaled = raw_food_distance / self.vision_range
 
             # Store all scores at once
             self.wall_distances[idx] = wall_distance_scaled
