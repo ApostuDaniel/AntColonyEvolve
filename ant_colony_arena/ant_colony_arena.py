@@ -55,7 +55,7 @@ MAX_VISION_RANGE = 90
 MIDDLE_VISION_RANGE = 60
 MIN_VISION_RANGE = 30
 
-MAX_FOOD_QUANTITY = 50
+MAX_FOOD_QUANTITY = 100
 FOOD_SIZE_SCALING = 0.5
 ANT_CARRY_CAPACITY = 60
 ANT_LIFE = 150
@@ -384,15 +384,17 @@ class Ant():
             food_in_segment = detected_food.get(idx, [])
             if food_in_segment:
                 # Use generator expression instead of list comprehension for efficiency
-                raw_food_distance, food_angle = min(
-                    ((math.hypot(food[0] - self.pos.x, food[1] - self.pos.y), food[2])
+                raw_food_distance, food_angle, food_radius = min(
+                    ((math.hypot(food[0] - self.pos.x, food[1] - self.pos.y) - food[3], food[2], food[3]) # distance to food center minus food radius
                      for food in food_in_segment),
                     key=lambda x: x[0],
                     default=None
                 )
+                # reestablish it to be the distance to the food centre
+                raw_food_distance += food_radius
 
-                if raw_food_distance is not None and raw_food_distance <= self.vision_range:
-                    food_distance_scaled = raw_food_distance / self.vision_range
+                if raw_food_distance is not None and raw_food_distance <= self.vision_range + food_radius:
+                    food_distance_scaled = raw_food_distance / (self.vision_range + food_radius)
 
             # Store all scores at once
             self.wall_distances[idx] = wall_distance_scaled
@@ -438,9 +440,9 @@ class Ant():
 
         return food_density_areas
 
-    def _get_fitting_vision_range_index(self, distance: float, vision_ranges: list):
+    def _get_fitting_vision_range_index(self, distance_squared: float, vision_ranges: list, food_size):
         for i in range(len(vision_ranges)):
-            if distance <= vision_ranges[i]:
+            if distance_squared <= (vision_ranges[i] + food_size) ** 2:
                 return i
         return None
 
@@ -464,7 +466,6 @@ class Ant():
     def _detect_nearby_food(self, food_sources):
         """
         Detects food sources within vision range and categorizes them into vision segments.
-        Marks them if they have come in contact with the ant.
 
         Parameters:
         - food_sources (list of tuples): The (x, y, quantity) positions of food sources and their quantity.
@@ -476,8 +477,6 @@ class Ant():
             - collected_food int: food intersecting ants body
         """
         # Pre-calculate common values
-        vision_range_squared = self.vision_range ** 2
-        view_ranges_squared = [view_range ** 2 for view_range in view_ranges]
 
         # Initialize detected_food with empty lists using dict comprehension
         detected_food = {segment_idx: [] for segment_idx in range(len(vision_segments))}
@@ -497,14 +496,15 @@ class Ant():
             dy = food_y - pos_y
             distance_squared = dx * dx + dy * dy
             food_size = int(max(2, quantity * FOOD_SIZE_SCALING))
-            eating_range_squared = ((ANT_DIM.x + food_size) / 2) ** 2
+            food_radius = food_size / 2
+            eating_range_squared = (ANT_DIM.x + food_radius) ** 2
             if distance_squared <= eating_range_squared:
                 #Mark food as eaten
                 food_in_eating_range.append(i)
 
-            fitting_view_range_idx = self._get_fitting_vision_range_index(distance_squared, view_ranges_squared)
+            fitting_view_range_idx = self._get_fitting_vision_range_index(distance_squared, view_ranges, food_radius)
 
-            if distance_squared <= vision_range_squared:
+            if distance_squared <= (self.vision_range + food_radius) ** 2:
                 # Only calculate angle for ants within range
                 angle_to_food = math.atan2(dy, dx) % (2 * math.pi)
                 # normalized angle
@@ -514,12 +514,12 @@ class Ant():
                 for start_angle, stop_angle, segment_idx in segment_boundaries:
                     if start_angle < stop_angle:
                         if start_angle <= angle_to_food <= stop_angle:
-                            detected_food[segment_idx].append((food_x, food_y, norm_angle_to_food))
+                            detected_food[segment_idx].append((food_x, food_y, norm_angle_to_food, food_radius))
                             density_areas[segment_idx][fitting_view_range_idx]['food'] += quantity
                             break
                     elif angle_to_food >= start_angle or angle_to_food <= stop_angle:
                         # Angle wraps around 2π boundary
-                        detected_food[segment_idx].append((food_x, food_y, norm_angle_to_food))
+                        detected_food[segment_idx].append((food_x, food_y, norm_angle_to_food, food_radius))
                         density_areas[segment_idx][fitting_view_range_idx]['food'] += quantity
                         break
 
@@ -1326,18 +1326,15 @@ class AntColonyEnv(ParallelEnv):
     def draw_food(self, canvas: pygame.Surface):
         # Draw food positions and size
         if self.food_sources is not None:
-            for food_source in self.food_sources:
-                # scale down the food size
-                food_size = int(max(2, food_source[2] * FOOD_SIZE_SCALING))
-                pygame.draw.rect(
+            for (x, y, quantity) in self.food_sources:
+                # scale down the food_size
+                # food_size is the diameter
+                food_size = int(max(2, quantity * FOOD_SIZE_SCALING))
+                pygame.draw.circle(
                     canvas,
                     (180, 180, 180),
-                    (
-                        food_source[0] - food_size / 2.,
-                        food_source[1] - food_size / 2.,
-                        food_size,
-                        food_size
-                    )
+                    (x, y),
+                    food_size / 2
                 )
 
     def draw_ant_vision(self, canvas: pygame.Surface, font: pygame.font):
@@ -1374,7 +1371,7 @@ class AntColonyEnv(ParallelEnv):
                     # compute distance to the center of each area
                     draw_distance = view_range / 2 if vision_idx <= 0 \
                         else view_ranges[vision_idx - 1] + (view_range - view_ranges[vision_idx - 1]) / 2
-                    # display number of entities in each density area
+                    # display food density
                     self._draw_text(
                         canvas,
                         font,
@@ -1407,7 +1404,6 @@ class AntColonyEnv(ParallelEnv):
                     -start_angle
                 )
 
-
     def draw_ants(self, canvas: pygame.Surface, font: pygame.font):
         # Draw nearest ant distance indicators
         for agent in self.agents:
@@ -1415,7 +1411,7 @@ class AntColonyEnv(ParallelEnv):
             for segment_idx, distance in ant.nearest_food_distances.items():
                 angle = ant.nearest_food_angles[segment_idx]
                 angle = angle * (2 * math.pi) # denormalize angle, from (0, 1) interval
-                if distance is not None and distance != 1.0:
+                if distance is not None and distance < 1.0:
                     # Calculate the central angle of the segment
                     angle_range, segment_color, _ = vision_segments[segment_idx]
 
@@ -1423,7 +1419,7 @@ class AntColonyEnv(ParallelEnv):
                     end_x = int(ant.pos.x + math.cos(angle) * distance * MAX_VISION_RANGE)
                     end_y = int(ant.pos.y + math.sin(angle) * distance * MAX_VISION_RANGE)
 
-                    # Draw a line from the ant to the nearest ant
+                    # Draw a line from the ant to the nearest food
                     pygame.draw.line(
                         canvas,
                         segment_color,  # segment color for nearest ant distance
