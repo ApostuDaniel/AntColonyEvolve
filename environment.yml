@@ -2,6 +2,7 @@ name: disertatie # This will become the name of your environment
 dependencies: # The list of packages to include in your environment
     - python=3.12 # You can specify versions
     - numpy
+    - scipy
     - gymnasium
     - matplotlib
     - graphviz

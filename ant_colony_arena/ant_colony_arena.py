@@ -20,6 +20,7 @@ from gymnasium.spaces import Box, Tuple, Dict
 from gymnasium.utils import colorize, seeding
 from pettingzoo import ParallelEnv
 from pettingzoo.utils import parallel_to_aec, wrappers
+from scipy.signal import convolve2d
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -93,7 +94,7 @@ vision_segments = [
 
 PHEROMONE_DETECTION_RANGE = MIN_VISION_RANGE / 2
 PHEROMONE_TYPES = 3
-PHEROMONE_DECAY = 0.96
+PHEROMONE_DECAY = 0.97
 PHEROMONE_DEPOSIT = 1.0
 MAX_DETECTABLE_PHEROMONE_CONCENTRATION = 2
 
@@ -526,7 +527,7 @@ class Ant():
                 cell_x = (j + 0.5) * cell_size
                 cell_y = (i + 0.5) * cell_size
 
-                if not np.any(pheromone_grid[i, j]):
+                if not np.sum(pheromone_grid[i, j]) >= 0.1:
                     continue
 
                 # Calculate vector from ant to cell
@@ -847,6 +848,21 @@ class AntColonyEnv(ParallelEnv):
         self.pheromone_grid = np.zeros((self.grid_height, self.grid_width, PHEROMONE_TYPES),
                                        dtype=np.float32)
 
+        # Arena mask to stop pheromones diffusing outside of arena
+        self.arena_mask = np.zeros((self.grid_height, self.grid_width), dtype=np.float32)
+        center_x = int(SCREEN_W / 2)
+        center_y = int(SCREEN_H / 2)
+        y, x = np.ogrid[-center_y:self.grid_height - center_y, -center_x:self.grid_width - center_x]
+        mask_radius = (min(self.grid_height, self.grid_width) / 2) * 0.98  # Slightly smaller than arena
+        self.arena_mask = x * x + y * y <= mask_radius * mask_radius
+
+        # Diffusion kernel
+        self.diffusion_kernel = np.array([
+            [0.01, 0.01, 0.01],
+            [0.01, .92, 0.01],  # Center keeps 92%, neighbors get 1% each
+            [0.01, 0.01, 0.01]
+        ])
+
     # Observation space should be defined here.
     # lru_cache allows observation and action spaces to be memoized, reducing clock cycles required to get each agent's space.
     # If your spaces change over time, remove this line (disable caching).
@@ -951,6 +967,36 @@ class AntColonyEnv(ParallelEnv):
                 if self.food_sources[i][2] <= 0:
                     self.food_sources[i] = get_rand_food_params()
 
+    def _apply_arena_mask(self):
+        """Zero out pheromones outside the circular arena"""
+
+        # Apply mask to all pheromone channels
+        for i in range(PHEROMONE_TYPES):
+            self.pheromone_grid[:, :, i] *= self.arena_mask
+
+    def _diffuse_pheromones(self):
+        """Apply diffusion to pheromone grid using convolution"""
+        # Create a copy to avoid modifying during convolution
+        diffused_grid = np.zeros_like(self.pheromone_grid)
+
+        # Apply convolution to each pheromone type separately
+        for i in range(PHEROMONE_TYPES):
+            channel = self.pheromone_grid[:, :, i]
+            # Apply convolution with boundary='fill' to prevent edge artifacts
+            diffused = convolve2d(
+                channel,
+                self.diffusion_kernel,
+                mode='same',
+                boundary='fill',
+                fillvalue=0
+            )
+            diffused_grid[:, :, i] = diffused
+
+        # Update the pheromone grid
+        self.pheromone_grid = diffused_grid
+        # # Optional: Apply arena mask to zero out pheromones outside arena
+        # self._apply_arena_mask()
+
 
     def reset(self, seed=None, options=None):
         self._destroy()
@@ -1043,12 +1089,16 @@ class AntColonyEnv(ParallelEnv):
         and any other additional information if necessary.
         """
 
+        # Apply pheromone decay
+        self.pheromone_grid *= PHEROMONE_DECAY
+
+        # Apply diffusion every 15 time steps
+        # if self.t % 15 == 0:
+        #     self._diffuse_pheromones()
+
         # Pygame controls and resources if render_mode == 'human'
         if self.render_mode == "human":
             self._render_frame
-
-        # Apply pheromone decay
-        self.pheromone_grid *= PHEROMONE_DECAY
 
         # don't respawn food for pheromone training
         self._respawn_food()
@@ -1224,9 +1274,9 @@ class AntColonyEnv(ParallelEnv):
                         cell_x = (j + 0.5) * self.cell_size
                         cell_y = (i + 0.5) * self.cell_size
 
-                        colour = (0, 255, 0)
-                        if not np.any(self.pheromone_grid[i, j]):
-                            colour = (255, 0, 0)
+                        colour = (255, 0, 0)
+                        if np.sum(self.pheromone_grid[i, j]) >= 0.1:
+                            colour = (0, 255, 0)
 
                         # Calculate vector from ant to cell
                         dx = cell_x - ant.pos.x
@@ -1563,7 +1613,7 @@ class AntColonyEnv(ParallelEnv):
 
 
 if __name__ == "__main__":
-    env = AntColonyEnv(render_mode='human', nr_of_ants=1, nr_of_food=7)
+    env = AntColonyEnv(render_mode='human', nr_of_ants=7, nr_of_food=7)
 
     while True:
         total_reward = 0

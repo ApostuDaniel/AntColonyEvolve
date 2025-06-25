@@ -345,14 +345,14 @@ if __name__ == "__main__":
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.INFO)
 
-    run_specificity="pheromone_no_health_1_agent"
+    run_specificity="run_2025-06-25_01-36-09_pheromone_no_health_7_agent"
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     current_run_directory = f"alg_runs/run_{timestamp}_{run_specificity}"
 
     # Run! Only relevant to look at the winner.
-    WINNER = run(20, make_ant_env, 3, VERSION, True, 7, False, os.path.join(current_run_directory, "plots"))[0]
+    WINNER = run(100, make_ant_env, 3, VERSION, True, 7, False, os.path.join(current_run_directory, "plots"))[0]
 
     os.makedirs(current_run_directory, exist_ok=True)
     # Save CPPN if wished reused and draw it + winner to file.
