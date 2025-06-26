@@ -22,55 +22,27 @@ import multiprocessing
 from functools import partial
 import itertools
 
+# GLOBAL IN WORKER PROCESS
+worker_env = None
+
 # S, M or L; Small, Medium or Large (logic implemented as "Not 'S' or 'M' then Large").
 VERSION = "M"
 VERSION_TEXT = "small" if VERSION == "S" else "medium" if VERSION == "M" else "large"
-
-# Original input coordinates based on diagram
-# INPUT_COORDINATES = [
-#     (0.0, 0.0), # r_norm
-#     (0.0, -0.05), # theta_norm
-#     (0.0, -0.1), # speed
-#     (0.0, -0.2), # theta
-#     (-0.95, -0.31), (-0.59, -0.81),(0, -1.0), (0.59, -0.81), (0.95, -0.31), #vision_segments_wall_distances
-#     (-0.92, -0.3), (-0.57, -0.78), (0, -0.97), (0.57, -0.78), (0.92, -0.3),  # vision_segments_food_distances
-#     (-0.31, -0.1), (-0.19, -0.26), (0, -0.33), (0.19, -0.26), (0.31, -0.1),  # vision_segments_food_angles
-#     (-0.2, -0.06), (-0.12, -0.17), (0, -0.2), (0.12, -0.17), (0.2, -0.06),  # density_area_close
-#     (-0.48, -0.15), (-0.3, -0.4), (0, -0.5), (0.3, -0.4), (0.48, -0.15),  # density_area_middle
-#     (-0.8, -0.26), (-0.49, -0.68), (0, -0.82), (0.49, -0.68), (0.8, -0.26),  # density_area_far
-# ]
-
-# # Favourite
-# INPUT_COORDINATES = [
-#     (0.0, 0.0), # r_norm
-#     (0.0, -0.1), # theta_norm
-#     (0.0, -0.2), # speed
-#     (0.0, -0.3), # theta
-#     (-1, -0.3), (-0.6, -0.8),(0, -1.0), (0.6, -0.8), (1, -0.3), #vision_segments_wall_distances
-#     (-0.9, -0.3), (-0.5, -0.8), (0, -0.9), (0.5, -0.8), (0.9, -0.3),  # vision_segments_food_distances
-#     # (-0.30, -0.1), (-0.2, -0.3), (0, -0.3), (0.2, -0.3), (0.3, -0.1),  # vision_segments_food_angles
-#     # (-0.2, -0.1), (-0.1, -0.15), (0, -0.2), (0.1, -0.15), (0.2, -0.1),  # density_area_close
-#     # (-0.5, -0.15), (-0.3, -0.4), (0, -0.5), (0.3, -0.4), (0.5, -0.15),  # density_area_middle
-#     # (-0.8, -0.25), (-0.5, -0.7), (0, -0.8), (0.5, -0.7), (0.8, -0.25),  # density_area_far
-# ]
 
 #coordinates that we try to allign parallel
 INPUT_COORDINATES = [
     # (0., 0.0), # r_norm
     # (0., -0.5), # theta_norm
-    (0., -0.1), # speed
-    (0., -0.15), # theta
-    (0., -0.2), # current_energy
-    (0., -0.25), # carried_food
-    (0., -0.33), # ant_in_nest
-    # (0., -0.36), # distance_to_nest
-    # (0., -0.39), # angle_to_nest
-    # (-1, -1.), (-0.5, -1.),(0, -1.), (0.5, -1.), (1, -1.), #vision_segments_wall_distances
-    # (-1, -0.8), (-0.5, -0.8),(0, -0.8), (0.5, -0.8), (1, -0.8),  # vision_segments_food_distances
-    # (-1, -0.7), (-0.5, -0.7),(0, -0.7), (0.5, -0.7), (1, -0.7),  # vision_segments_food_angles
-    # (-0.7, -0.4), (-0.35, -0.4), (0, -0.4), (0.35, -0.4), (0.7, -0.4),  # density_area_close
-    # (-0.8, -0.5), (-0.4, -0.5), (0, -0.5), (0.4, -0.5), (0.8, -0.5),  # density_area_middle
-    # (-0.9, -0.6), (-0.6, -0.6), (0, -0.6), (0.6, -0.6), (0.9, -0.6),  # density_area_far
+    (-0.2, -0.1), # speed
+    (0.2, -0.1), # theta
+    (-0.2, -0.2), # current_energy
+    (0.2, -0.2), # carried_food
+    (0., -0.2), # ant_in_nest
+    (0., -0.3),  # heartbeat
+    (-0.2, -0.3),  # reward_sensor
+    (0.2, -0.3),  # penalty_sensor
+    (0.2, -0.35), # distance_to_nest
+    (0.2, -0.35), # angle_to_nest
 ]
 
 # depending on how many vision segments we use, compute their spacing in the substrate on x-axis
@@ -85,8 +57,8 @@ vision_ranges_y_coord = [-0.4 - 0.1 * i for i in range(len(view_ranges))]
 #     INPUT_COORDINATES.extend([(x, y) for x in vision_segments_x_coord])
 
 # provide pheromones coordinates
-for x in vision_segments_x_coord:
-    INPUT_COORDINATES.extend([(x, -0.6 - (i * 0.05)) for i in range(PHEROMONE_TYPES)])  # pheromone coordinates for each vision segment
+# for x in vision_segments_x_coord:
+#     INPUT_COORDINATES.extend([(x, -0.6 - (i * 0.05)) for i in range(PHEROMONE_TYPES)])  # pheromone coordinates for each vision segment
 
 
 
@@ -133,6 +105,11 @@ def ini_pop(state, stats, config, output, output_dir=None):
     pop.add_reporter(stats)
     return pop
 
+def worker_init(env_fun, agents_in_env):
+    """Initialize worker-local environment once"""
+    global worker_env
+    worker_env = env_fun(agents_in_env)  # Create once per worker
+
 def _run_one_trial(nets, networks, env):
     """
     Helper function to run a single trial using a pre-created environment and networks.
@@ -175,46 +152,49 @@ def _run_one_trial(nets, networks, env):
 
     return total_rewards
 
-def _run_one_env(index, network, env):
+def _run_one_env(index, phenotype_net, nr_activations):
     """
     Helper function to run a single env with multiple copies of the same network.
 
     :param index: the index of the genome
     :param net: ANN to be multiplied
     :param network: needed for activation
-    :param env: the environment to be run
     :return:
     """
-    # Make as many nets as there are agents in the env
-    nets = [network.create_phenotype_network() for _ in env.agents]
-    # Reset network states
-    for net in nets:
-        net.reset()
+    #Reuse worker-local environment for trials
+    global worker_env
 
     # We do this because sometimes len of networks is smaller than len of agents
-    observations, infos = env.reset()
-    nr_of_agents = len(env.agents)
+    observations, infos = worker_env.reset()
+    nr_of_agents = len(worker_env.agents)
     terminations = {"placeholder": False}
     truncations = {"placeholder": False}
     reward = 0
 
-    # When agents are terminated during run, but the association needs to remain the same
-    agent_nets = dict(zip(env.agents, list(range(len(nets)))))
+    # Make as many nets as there are agents in the env
+    nets = [copy.deepcopy(phenotype_net) for _ in range(nr_of_agents - 1)]
+    nets.append(phenotype_net)
+    # Reset network states
+    for net in nets:
+        net.reset()
 
-    while env.agents and not (all(terminations.values()) or any(truncations.values())):
+    # When agents are terminated during run, but the association needs to remain the same
+    agent_nets = dict(zip(worker_env.agents, list(range(len(nets)))))
+
+    while worker_env.agents and not (all(terminations.values()) or any(truncations.values())):
 
         outputs = []
-        for agent in env.agents:
+        for agent in worker_env.agents:
             net_id = agent_nets[agent]
             net = nets[net_id]
             obs = observations[agent]
             # Multiple activations if configured
-            for _ in range(network.activations):
+            for _ in range(nr_activations):
                 output = net.activate(np.array(obs))
             outputs.append((agent, output))
 
         actions = dict(outputs)
-        observations, rewards, terminations, truncations, infos = env.step(actions)
+        observations, rewards, terminations, truncations, infos = worker_env.step(actions)
 
         reward += sum(rewards.values())
 
@@ -236,11 +216,15 @@ def run_es(gens, env_fun, trials, max_steps, config, params, substrate, single_n
     def eval_fitness_parallel_envs(genomes, config):
 
         curr_envs = envs[:len(genomes) * trials]
-        cppns = [neat.nn.FeedForwardNetwork.create(g, config) for _, g in genomes]
 
+        phenotype_nets = []
         networks = []
-        for _ in range(trials):
-            networks.extend([ESNetwork(substrate, cppn, params) for cppn in cppns])
+        for _, g in genomes:
+            cppn = neat.nn.FeedForwardNetwork.create(g, config)
+            es_net = ESNetwork(substrate, cppn, params)
+            networks.append(es_net)
+            net = es_net.create_phenotype_network()
+            phenotype_nets.append(net)
 
         # Prepare trial runner
         env_runner = partial(
@@ -248,12 +232,18 @@ def run_es(gens, env_fun, trials, max_steps, config, params, substrate, single_n
         )
 
         # Run envs in parallel
-        with concurrent.futures.ProcessPoolExecutor() as executor:
+        with concurrent.futures.ProcessPoolExecutor(
+            max_workers=16,
+            initializer=worker_init,
+            initargs=(env_fun, agents_in_env)
+        ) as executor:
             # Map each environment to a net
             futures = []
             for j in range(trials):
                 offset = j * len(genomes)
-                futures.extend([executor.submit(env_runner, i, networks[offset + i], curr_envs[offset + i]) for i in range(len(genomes))])
+                for i, net in enumerate(phenotype_nets):
+                    futures.append(executor.submit(env_runner, i, net, networks[i].activations))
+                # futures.extend([executor.submit(env_runner, i, networks[offset + i], curr_envs[offset + i]) for i in range(len(genomes))])
             results = [f.result() for f in concurrent.futures.as_completed(futures)]
 
         # sort and group results by genome index, should be 'trials' results with the same index
@@ -336,7 +326,7 @@ def run(gens, env_fun, trials, version, single_network_env=True, agents_in_env=1
 
 def make_ant_env(ants_in_env=1):
     # env = ant_arena.AntColonyEnv(ants_in_env, 13, render_mode='human')
-    env = ant_arena.AntColonyEnv(ants_in_env, 7)
+    env = ant_arena.AntColonyEnv(ants_in_env, 10)
     env.reset()
     return env
 
@@ -345,14 +335,14 @@ if __name__ == "__main__":
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.INFO)
 
-    run_specificity="run_2025-06-25_01-36-09_pheromone_no_health_7_agent"
+    run_specificity="no_pheromone_test_ant_evolution_efficiency_100"
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     current_run_directory = f"alg_runs/run_{timestamp}_{run_specificity}"
 
     # Run! Only relevant to look at the winner.
-    WINNER = run(100, make_ant_env, 3, VERSION, True, 7, False, os.path.join(current_run_directory, "plots"))[0]
+    WINNER = run(100, make_ant_env, 3, VERSION, True, 1, False, os.path.join(current_run_directory, "plots"))[0]
 
     os.makedirs(current_run_directory, exist_ok=True)
     # Save CPPN if wished reused and draw it + winner to file.
