@@ -43,7 +43,7 @@ INPUT_COORDINATES = [
     (-0.2, -0.6),  # reward_sensor
     (0.2, -0.6),  # penalty_sensor
     (0.2, -0.5), # distance_to_nest
-    (0.2, -0.5), # angle_to_nest
+    (-0.2, -0.5), # angle_to_nest
 ]
 
 # depending on how many vision segments we use, compute their spacing in the substrate on x-axis
