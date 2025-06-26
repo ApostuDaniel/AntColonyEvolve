@@ -44,9 +44,10 @@ TIMESTEP = 1. / SIM_FPS  # Not sure if this will be necessary, given the fixed F
 TIME_LIMIT = SIM_FPS * 12  # 12 seconds
 
 ANT_DIM = vec2d(5, 5)
-AGENT_SPEED = 10.00  # Maximum ant speed observed in data (pixels)
-AGENT_ACCELERATION = 3.0
+AGENT_SPEED = 7.00  # Maximum ant speed observed in data (pixels)
+AGENT_ACCELERATION = 2.50
 TURN_RATE = 0.3575  # Maximum turning rate observed in data (radians)
+MAX_TRAVEL_PER_EPISODE = AGENT_SPEED * TIME_LIMIT
 
 NEST_RADIUS = SCREEN_W / 20
 DRAW_NEST_SENSORS = False
@@ -66,7 +67,7 @@ SHOULD_FOOD_RESPAWN = True
 
 DRAW_ANT_VISION = True
 DRAW_PHEROMONES = False
-DRAW_FOOD_GRID = True
+DRAW_FOOD_GRID = False
 
 # 5 vision segments
 # vision_segments = [
@@ -93,9 +94,9 @@ vision_segments = [
     ((math.pi / 6, math.pi / 2), (0, 0, 255), 'forward_r1'),
 ]
 
-PHEROMONE_DETECTION_RANGE = MIN_VISION_RANGE / 2
+PHEROMONE_DETECTION_RANGE = MIN_VISION_RANGE / 1.5
 PHEROMONE_TYPES = 3
-PHEROMONE_DECAY = 0.97
+PHEROMONE_DECAY = 0.98
 PHEROMONE_DEPOSIT = 1.0
 MAX_DETECTABLE_PHEROMONE_CONCENTRATION = 2
 
@@ -307,8 +308,7 @@ class Ant():
         self.pos = vec2d(*pos)
         self.speed = 0.0
         self.theta = theta if theta is not None else 0.0
-        # self.theta_dot = 0.0
-        self.trail = []
+        self.traveled_distance = 0
 
         # Timing counters for smooth turning
         self.turning_time_left = 0.0
@@ -671,7 +671,9 @@ class Ant():
         # If leaving the circle, push agent back into circle.
         self.wall_collision = not is_rectangle_in_circle(desired_pos[0], desired_pos[1], ANT_DIM.x, self.arena_center, self.arena_radius)
         if not self.wall_collision:
+            self.traveled_distance += compute_distance(self.pos.x, self.pos.y, desired_pos[0], desired_pos[1])
             self.pos = vec2d(desired_pos[0], desired_pos[1])
+
 
     def handle_food(self, food_sources, nest, agent, decrease_food_source=True):
         self.current_food = 0
@@ -799,10 +801,11 @@ class Ant():
             # theta_norm,  # Normalized angular position
             self.speed / AGENT_SPEED,  # Normalized current speed
             self.theta / (2 * math.pi),  # Normalized current orientation
+            time / (TIME_LIMIT * SIM_FPS),  # HEARTBEAT
+            self.traveled_distance / MAX_TRAVEL_PER_EPISODE, # normalized travel distance
             self.current_energy / ANT_LIFE, # normalized health
             self.carried_food / ANT_CARRY_CAPACITY, # normalize food carry
             int(ant_in_nest), # 1 if ant is in nest, 0 otherwise
-            time / (TIME_LIMIT * SIM_FPS), # HEARTBEAT
             int(self.current_food > 0 or (self.carried_food > 0 and ant_in_nest)), # reward sensor
             int(int(self.wall_collision)), # penalty sensor
             # nest_distance / (self.arena_radius * 2), # normalize to arena diameter, the maximum distance between ant and nest
@@ -954,10 +957,11 @@ class AntColonyEnv(ParallelEnv):
             # 'theta_norm': Box(-1.0, 1.0),
             'speed': Box(-1., 1., (1,), np.float32),
             'theta': Box(0.0, 1., (1,), np.float32),
+            "heartbeat": Box(0., 1., (1,), np.float32),
+            "travel_distance": Box(0., 1., (1,), np.float32),
             "current_energy": Box(0., 1., (1, ) , np.float32),
             "carried_food": Box(0., 1., (1, ) , np.float32),
             "ant_in_nest": Box(0., 1., (1, ) , np.float32),
-            "heartbeat": Box(0., 1., (1,), np.float32),
             "reward_sensor": Box(0., 1., (1,), np.float32),
             "penalty_sensor": Box(0., 1., (1,), np.float32),
             # "distance_to_nest": Box(0.0, 1., (1, ), np.float32),
@@ -1662,10 +1666,10 @@ class AntColonyEnv(ParallelEnv):
 
         self.highlight_best_ant(canvas)
 
-        self.draw_pheromone_grid(canvas, DRAW_PHEROMONES)
-
         if DRAW_FOOD_GRID:
             self.draw_food_grid(canvas)
+
+        self.draw_pheromone_grid(canvas, DRAW_PHEROMONES)
 
         self.draw_nest(canvas, font)
 
@@ -1713,7 +1717,7 @@ class AntColonyEnv(ParallelEnv):
 
 
 if __name__ == "__main__":
-    env = AntColonyEnv(render_mode='human', nr_of_ants=1, nr_of_food=1)
+    env = AntColonyEnv(render_mode='human', nr_of_ants=13, nr_of_food=1)
 
     while True:
         total_reward = 0

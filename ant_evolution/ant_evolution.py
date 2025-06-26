@@ -34,11 +34,12 @@ INPUT_COORDINATES = [
     # (0., 0.0), # r_norm
     # (0., -0.5), # theta_norm
     (-0.2, -0.1), # speed
-    (0.2, -0.1), # theta
+    (-0.1, -0.1), # theta
+    (0.1, -0.1),  # heartbeat
+    (-0.2, -0.1),  # travel_distance
     (-0.2, -0.2), # current_energy
     (0.2, -0.2), # carried_food
     (0., -0.2), # ant_in_nest
-    (0., -0.3),  # heartbeat
     (-0.2, -0.3),  # reward_sensor
     (0.2, -0.3),  # penalty_sensor
     # (0.2, -0.35), # distance_to_nest
@@ -335,14 +336,14 @@ if __name__ == "__main__":
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.INFO)
 
-    run_specificity="no_pheromone_test_ant_evolution_efficiency_100"
+    run_specificity="pheromone_test_1_food_13_ants_no_obstacles_40gen"
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     current_run_directory = f"alg_runs/run_{timestamp}_{run_specificity}"
 
     # Run! Only relevant to look at the winner.
-    WINNER = run(100, make_ant_env, 3, VERSION, True, 13, False, os.path.join(current_run_directory, "plots"))[0]
+    WINNER = run(40, make_ant_env, 1, VERSION, True, 13, False, os.path.join(current_run_directory, "plots"))[0]
 
     os.makedirs(current_run_directory, exist_ok=True)
     # Save CPPN if wished reused and draw it + winner to file.
