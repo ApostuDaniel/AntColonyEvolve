@@ -65,8 +65,8 @@ INPUT_COORDINATES.extend([(x, 0.3) for x in vision_segments_x_coord]) #vision_se
 OUTPUT_COORDINATES = \
     [
         (0., 0.7), # acceleration
-        (-0.5, 0.7), # turn left
-        (0.5, 0.7), #turn_right
+        (-1.0, 0.7), # turn left
+        (1.0, 0.7), #turn_right
         (0., 0.5) # pheromone type
     ]
 
