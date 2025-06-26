@@ -41,8 +41,8 @@ INPUT_COORDINATES = [
     (0., -0.3),  # heartbeat
     (-0.2, -0.3),  # reward_sensor
     (0.2, -0.3),  # penalty_sensor
-    (0.2, -0.35), # distance_to_nest
-    (0.2, -0.35), # angle_to_nest
+    # (0.2, -0.35), # distance_to_nest
+    # (0.2, -0.35), # angle_to_nest
 ]
 
 # depending on how many vision segments we use, compute their spacing in the substrate on x-axis
@@ -57,8 +57,8 @@ vision_ranges_y_coord = [-0.4 - 0.1 * i for i in range(len(view_ranges))]
 #     INPUT_COORDINATES.extend([(x, y) for x in vision_segments_x_coord])
 
 # provide pheromones coordinates
-# for x in vision_segments_x_coord:
-#     INPUT_COORDINATES.extend([(x, -0.6 - (i * 0.05)) for i in range(PHEROMONE_TYPES)])  # pheromone coordinates for each vision segment
+for x in vision_segments_x_coord:
+    INPUT_COORDINATES.extend([(x, -0.6 + (i * 0.05)) for i in range(PHEROMONE_TYPES)])  # pheromone coordinates for each vision segment
 
 
 
@@ -326,7 +326,7 @@ def run(gens, env_fun, trials, version, single_network_env=True, agents_in_env=1
 
 def make_ant_env(ants_in_env=1):
     # env = ant_arena.AntColonyEnv(ants_in_env, 13, render_mode='human')
-    env = ant_arena.AntColonyEnv(ants_in_env, 10)
+    env = ant_arena.AntColonyEnv(ants_in_env, 1)
     env.reset()
     return env
 
@@ -342,7 +342,7 @@ if __name__ == "__main__":
     current_run_directory = f"alg_runs/run_{timestamp}_{run_specificity}"
 
     # Run! Only relevant to look at the winner.
-    WINNER = run(100, make_ant_env, 3, VERSION, True, 1, False, os.path.join(current_run_directory, "plots"))[0]
+    WINNER = run(100, make_ant_env, 3, VERSION, True, 13, False, os.path.join(current_run_directory, "plots"))[0]
 
     os.makedirs(current_run_directory, exist_ok=True)
     # Save CPPN if wished reused and draw it + winner to file.

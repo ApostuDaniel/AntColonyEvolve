@@ -32,9 +32,9 @@ logger.addHandler(handler)
 
 SIM_FPS = 60  # Simulation environment FPS
 
-SCREEN_W = 1150
-SCREEN_H = 1150
-BOUNDARY_SCALE = 0.02
+SCREEN_W = 1200
+SCREEN_H = 1200
+BOUNDARY_SCALE = 0.01
 
 vec2d = namedtuple('vec2d', ['x', 'y'])
 arena_sizes = namedtuple('arena_sizes', ['arena_center', 'arena_radius'])
@@ -45,20 +45,20 @@ TIME_LIMIT = SIM_FPS * 12  # 12 seconds
 
 ANT_DIM = vec2d(5, 5)
 AGENT_SPEED = 10.00  # Maximum ant speed observed in data (pixels)
-AGENT_ACCELERATION = 3.00
+AGENT_ACCELERATION = 3.0
 TURN_RATE = 0.3575  # Maximum turning rate observed in data (radians)
 
 NEST_RADIUS = SCREEN_W / 20
 
 SPEED_PENALTY_BASE = 1.5 ** (1 / AGENT_SPEED)
 
-MAX_VISION_RANGE = 90
-MIDDLE_VISION_RANGE = 60
-MIN_VISION_RANGE = 30
+MAX_VISION_RANGE = 81
+MIDDLE_VISION_RANGE = 54
+MIN_VISION_RANGE = 27
 
-MAX_FOOD_QUANTITY = 200
-FOOD_SIZE_SCALING = 0.3
-ANT_CARRY_CAPACITY = 30
+MAX_FOOD_QUANTITY = 100
+FOOD_SIZE_SCALING = 0.5
+ANT_CARRY_CAPACITY = 50
 ANT_LIFE = 150
 
 DRAW_ANT_VISION = True
@@ -97,12 +97,6 @@ PHEROMONE_DEPOSIT = 1.0
 MAX_DETECTABLE_PHEROMONE_CONCENTRATION = 2
 
 view_ranges = [MIN_VISION_RANGE, MIDDLE_VISION_RANGE, MAX_VISION_RANGE]
-
-
-REWARD_TYPE = 'coverage'  # 'action', 'coverage', 'aggregation'
-TRACK_TRAIL = 'all'  # 'all', 'fade', 'none'
-MOVEMENT_THRESHOLD = 10
-FADE_DURATION = 5  # seconds
 
 ##########################################
 #          Assistance functions          #
@@ -673,9 +667,9 @@ class Ant():
         Refresh energy if ant in nest
         :return:
         '''
-        if self.in_nest and self.current_energy < ANT_LIFE:
-            self.current_energy = min(ANT_LIFE, int(self.current_energy + (ANT_LIFE / 45)))
-            return
+        # if self.in_nest and self.current_energy < ANT_LIFE:
+        #     self.current_energy = min(ANT_LIFE, int(self.current_energy + (ANT_LIFE / 45)))
+        #     return
 
         health_lost = speed_penalty_square(self.speed) + int(self.wall_collision) # decrease extra if colliding with wall
         if self.carried_food >= health_lost:
@@ -970,7 +964,7 @@ class AntColonyEnv(ParallelEnv):
             return -100
 
         nest_reward = self.nest.food_register.get(agent, 0)
-        reward = nest_reward * 3 + ant.current_food - int(ant.wall_collision)
+        reward = nest_reward * 3 + ant.current_food
         ant.total_reward += reward
 
         return reward
@@ -992,6 +986,7 @@ class AntColonyEnv(ParallelEnv):
     def _respawn_food(self):
         rng = np.random.default_rng()
         max_food_draw_radius = self.ant_arena.arena_radius * 0.9 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING) * 2
+        min_food_draw_radius = self.ant_arena.arena_radius * 0.4
         # max_food_draw_radius = self.nest.radius * 8 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING) * 2
 
         def get_rand_food_params():
@@ -1000,7 +995,7 @@ class AntColonyEnv(ParallelEnv):
                 quantity = int(rng.uniform(MAX_FOOD_QUANTITY - 10, MAX_FOOD_QUANTITY))
                 # return int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y), quantity
                 x, y = int(self.nest.pos.x + x), int(self.nest.pos.y + y)
-                if (compute_distance(x, y, self.nest.pos.x, self.nest.pos.y) > self.ant_arena.arena_radius * 0.6 and
+                if (compute_distance(x, y, self.nest.pos.x, self.nest.pos.y) > min_food_draw_radius and
                         is_rectangle_in_circle(x, y, self.ant_arena.arena_center, self.ant_arena.arena_radius)):
                     return x, y, quantity
 
@@ -1616,7 +1611,8 @@ class AntColonyEnv(ParallelEnv):
 
         self.draw_pheromone_grid(canvas, DRAW_PHEROMONES)
 
-        self.draw_food_grid(canvas)
+        if DRAW_FOOD_GRID:
+            self.draw_food_grid(canvas)
 
         self.draw_nest(canvas, font)
 
@@ -1664,7 +1660,7 @@ class AntColonyEnv(ParallelEnv):
 
 
 if __name__ == "__main__":
-    env = AntColonyEnv(render_mode='human', nr_of_ants=1, nr_of_food=7)
+    env = AntColonyEnv(render_mode='human', nr_of_ants=13, nr_of_food=1)
 
     while True:
         total_reward = 0
