@@ -724,16 +724,16 @@ class Ant():
         if 0 <= grid_x < grid_width and 0 <= grid_y < grid_height:
             # Determine deposit type based on action value
             if pheromone_action < -0.5:
-                # No deposit
-                self.pheromone_deposit_type = None
-            elif pheromone_action < 0:
                 # Type 1 (red)
                 pheromone_grid[grid_y, grid_x, 0] = PHEROMONE_DEPOSIT
                 self.pheromone_deposit_type = 0
-            elif pheromone_action < 0.5:
+            elif pheromone_action < 0:
                 # Type 2 (green)
                 pheromone_grid[grid_y, grid_x, 1] = PHEROMONE_DEPOSIT
                 self.pheromone_deposit_type = 1
+            elif pheromone_action < 0.5:
+                # No deposit
+                self.pheromone_deposit_type = None
             else:
                 # Type 3 (blue)
                 pheromone_grid[grid_y, grid_x, 2] = PHEROMONE_DEPOSIT
