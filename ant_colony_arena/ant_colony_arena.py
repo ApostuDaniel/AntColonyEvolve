@@ -158,7 +158,7 @@ def circle_transformation(circle_a, circle_b):
 def compute_distance(x1, y1, x2, y2):
     return math.hypot(x1 - x2, y1 - y2)
 
-def is_rectangle_in_circle(x, y, circle_center, circle_radius, fully_contained=True):
+def is_rectangle_in_circle(x, y, length, circle_center, circle_radius, fully_contained=True):
     """
     Check if a pygame.Rect is completely or partially contained within a circle.
 
@@ -171,8 +171,8 @@ def is_rectangle_in_circle(x, y, circle_center, circle_radius, fully_contained=T
     bool: if fully_contained = True, return True if rect fully contained within circle
           if fully_contained = False, return True if rect partially contained within circle.
     """
-    rect = pygame.Rect(x - ANT_DIM.x / 2., y - ANT_DIM.y / 2.,
-                       ANT_DIM.x, ANT_DIM.y)
+    rect = pygame.Rect(x - length / 2., y - length / 2.,
+                       length, length)
     rect_corners = [
         (rect.left, rect.top),  # Top-left
         (rect.left, rect.bottom),  # Bottom-left
@@ -224,6 +224,36 @@ def to_polar_coordinates(pos, arena_center, arena_radius, norm=True):
         return r_normalized, theta_normalized
     else:
         return r, theta
+
+
+def from_polar_coordinates(polar_coords, arena_center, arena_radius, norm=True):
+    """
+    Converts normalized polar coordinates (r, θ) back to Cartesian coordinates (x, y).
+
+    Parameters:
+    - polar_coords: tuple, (r, θ) in normalized polar coordinates
+    - arena_center: tuple, (x, y) center of the arena
+    - arena_radius: float, radius of the circular arena
+    - norm: boolean, True if input is normalized (default)
+
+    Returns:
+    - tuple: (x, y) Cartesian coordinates
+    """
+    # Unpack polar coordinates
+    r_norm, theta_norm = polar_coords
+
+    if norm:
+        # Denormalize coordinates
+        r = r_norm * arena_radius  # Convert [0,1] back to [0,arena_radius]
+        theta = theta_norm * np.pi  # Convert [-1,1] back to [-π, π]
+    else:
+        r, theta = r_norm, theta_norm
+
+    # Convert polar to Cartesian coordinates
+    x = arena_center[0] + r * np.cos(theta)
+    y = arena_center[1] + r * np.sin(theta)
+
+    return x, y
 
 
 ##########################################
@@ -639,7 +669,7 @@ class Ant():
         # Set the desired position based on direction and speed relative to timestep
         desired_pos = np.add(np.array(self.pos), direction)
         # If leaving the circle, push agent back into circle.
-        self.wall_collision = not is_rectangle_in_circle(desired_pos[0], desired_pos[1], self.arena_center, self.arena_radius)
+        self.wall_collision = not is_rectangle_in_circle(desired_pos[0], desired_pos[1], ANT_DIM.x, self.arena_center, self.arena_radius)
         if not self.wall_collision:
             self.pos = vec2d(desired_pos[0], desired_pos[1])
 
@@ -819,7 +849,7 @@ class Nest:
         self.food_register = {}
 
     def is_ant_in_nest(self, ant: Ant):
-        return is_rectangle_in_circle(ant.pos.x, ant.pos.y, self.pos, self.radius, False)
+        return is_rectangle_in_circle(ant.pos.x, ant.pos.y, ANT_DIM.x, self.pos, self.radius, False)
 
     def register_food(self, quantity, agent):
         self.food_register[agent] = quantity
@@ -1004,13 +1034,23 @@ class AntColonyEnv(ParallelEnv):
                 # return int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y), quantity
                 x, y = int(self.nest.pos.x + x), int(self.nest.pos.y + y)
                 if (compute_distance(x, y, self.nest.pos.x, self.nest.pos.y) > min_food_draw_radius and
-                        is_rectangle_in_circle(x, y, self.ant_arena.arena_center, self.ant_arena.arena_radius)):
+                        is_rectangle_in_circle(x, y, quantity * FOOD_SIZE_SCALING / 2, self.ant_arena.arena_center, self.ant_arena.arena_radius)):
                     return x, y, quantity
+
+        def place_food_mirroring_nest():
+            """Returns food parameters with a food location that mirrors the position of the nest over arena origin."""
+            nest_r, nest_theta = to_polar_coordinates(self.nest.pos, self.ant_arena.arena_center, self.ant_arena.arena_radius)
+            food_theta = (nest_theta + 1) - 2 if nest_theta + 1 > 1 else nest_theta + 1
+            quantity = int(rng.uniform(MAX_FOOD_QUANTITY - 10, MAX_FOOD_QUANTITY))
+            food_x, food_y = from_polar_coordinates((nest_r, food_theta), self.ant_arena.arena_center, self.ant_arena.arena_radius, True)
+            return food_x, food_y, quantity
 
         if self.food_sources is None or len(self.food_sources) == 0:
             self.food_sources = []
             for i in range(self.nr_of_food):
                 x, y, quantity = get_rand_food_params()
+                if self.nr_of_food == 1:
+                    x, y, quantity = place_food_mirroring_nest()
                 self.food_sources.append((x, y, quantity))
                 # Add to food grid
                 self.food_grid.add_item(i, x, y)
@@ -1074,11 +1114,15 @@ class AntColonyEnv(ParallelEnv):
         # spawn nest
         # max_nest_draw_radius = self.ant_arena.arena_radius * 0.20 - NEST_RADIUS * 2
         # draw in center
-        max_nest_draw_radius = self.ant_arena.arena_radius * 0.10
-
-        x, y = rng.uniform(-max_nest_draw_radius, max_nest_draw_radius, size=2)
-        x, y = (int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y))
-        self.nest = Nest((x, y), int(NEST_RADIUS))
+        max_nest_draw_radius = self.ant_arena.arena_radius * 0.90
+        min_nest_draw_radius = self.ant_arena.arena_radius * 0.70
+        while True:
+            x, y = rng.uniform(-max_nest_draw_radius, max_nest_draw_radius, size=2)
+            x, y = (int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y))
+            if is_rectangle_in_circle(x, y, int(NEST_RADIUS), self.ant_arena.arena_center, self.ant_arena.arena_radius)\
+                    and compute_distance(x, y, self.ant_arena.arena_center.x, self.ant_arena.arena_center.y) > min_nest_draw_radius:
+                self.nest = Nest((x, y), int(NEST_RADIUS))
+                break
 
         # spawn ants in nest
         max_ant_draw_radius = self.nest.radius
@@ -1087,7 +1131,7 @@ class AntColonyEnv(ParallelEnv):
                 x, y = rng.uniform(-max_ant_draw_radius, max_ant_draw_radius, size=2)
                 x, y = (int(self.nest.pos.x + x), int(self.nest.pos.y + y))
                 theta = rng.uniform(0.0, 2 * math.pi)
-                if is_rectangle_in_circle(x, y, self.nest.pos, self.nest.radius):
+                if is_rectangle_in_circle(x, y, ANT_DIM.x, self.nest.pos, self.nest.radius):
                     self.ants[agent] = Ant((x, y), theta)
                     break
 
