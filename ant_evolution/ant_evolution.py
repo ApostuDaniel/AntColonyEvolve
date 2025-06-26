@@ -42,8 +42,8 @@ INPUT_COORDINATES = [
     (0., -0.8), # ant_in_nest
     (-0.2, -0.6),  # reward_sensor
     (0.2, -0.6),  # penalty_sensor
-    # (0.2, -0.35), # distance_to_nest
-    # (0.2, -0.35), # angle_to_nest
+    (0.2, -0.5), # distance_to_nest
+    (0.2, -0.5), # angle_to_nest
 ]
 
 # depending on how many vision segments we use, compute their spacing in the substrate on x-axis
@@ -206,17 +206,11 @@ def run_es(gens, env_fun, trials, max_steps, config, params, substrate, single_n
     Generic OpenAI Gym runner for ES-HyperNEAT.
     """
 
-    if single_network_env:
-        # create an env for each genome
-        envs = [env_fun(agents_in_env) for _ in range(config.pop_size * trials)]
-    else:
+    if not single_network_env:
         # Pre-create environments for all trials
         envs = [env_fun() for _ in range(trials)]
 
     def eval_fitness_parallel_envs(genomes, config):
-
-        curr_envs = envs[:len(genomes) * trials]
-
         phenotype_nets = []
         networks = []
         for _, g in genomes:
@@ -240,10 +234,8 @@ def run_es(gens, env_fun, trials, max_steps, config, params, substrate, single_n
             # Map each environment to a net
             futures = []
             for j in range(trials):
-                offset = j * len(genomes)
                 for i, net in enumerate(phenotype_nets):
                     futures.append(executor.submit(env_runner, i, net, networks[i].activations))
-                # futures.extend([executor.submit(env_runner, i, networks[offset + i], curr_envs[offset + i]) for i in range(len(genomes))])
             results = [f.result() for f in concurrent.futures.as_completed(futures)]
 
         # sort and group results by genome index, should be 'trials' results with the same index
@@ -335,7 +327,7 @@ if __name__ == "__main__":
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.INFO)
 
-    nr_gens = 40
+    nr_gens = 60
     run_specificity=f"pheromone_test_1_food_13_ants_no_obstacles_gen{nr_gens}"
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -354,22 +346,3 @@ if __name__ == "__main__":
     draw_net(CPPN, filename=os.path.join(current_run_directory, f"es_hyperneat_ant_evolution_{VERSION_TEXT}_cppn"))
     with open(os.path.join(current_run_directory, f'es_hyperneat_ant_evolution_{VERSION_TEXT}_cppn.pkl'), 'wb') as output:
         pickle.dump(CPPN, output, pickle.HIGHEST_PROTOCOL)
-
-# Added before return in neat/reproduction.py compute_spawn() function
-# # If there are more spawns than the inital population size, randomly remove based on roulete wheel selection
-# total_spawn = sum(spawn_amounts)
-# if total_spawn > pop_size:
-#     roulete_intervals = list(adjusted_fitness)
-#     for i in range(1, len(spawn_amounts)):
-#         roulete_intervals[i] = roulete_intervals[i - 1] + spawn_amounts[i]
-#
-# while total_spawn > pop_size:
-#     random_af_pick = random.random()
-#     last_step = 0
-#     for i, roulete_interval in enumerate(roulete_intervals):
-#         if last_step <= random_af_pick < roulete_interval[i]:
-#             if spawn_amounts[i] > min_species_size:
-#                 spawn_amounts[i] -= 1
-#                 total_spawn -= 1
-#             break;
-#         last_step = roulete_interval[i]
