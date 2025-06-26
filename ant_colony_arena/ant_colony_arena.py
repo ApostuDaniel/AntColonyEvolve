@@ -812,6 +812,8 @@ class Ant():
             # nest_angle / (2 * math.pi), # normalized angle to nest
         ]
 
+        result.extend(self.pheromone_sensors.flatten())
+
         # add scaled nearest wall distances per vision segment
         result.extend([self.wall_distances[i] for i in range(len(self.wall_distances))])
         # add nearest food distances per vision segment
@@ -825,8 +827,6 @@ class Ant():
         #     # result.append(density_areas[segment_idx][0]['food'])
         #     for range_idx in range(len(view_ranges)):
         #         result.append(density_areas[segment_idx][range_idx]['food'])
-
-        result.extend(self.pheromone_sensors.flatten())
 
         return result
 
@@ -966,11 +966,11 @@ class AntColonyEnv(ParallelEnv):
             "penalty_sensor": Box(0., 1., (1,), np.float32),
             # "distance_to_nest": Box(0.0, 1., (1, ), np.float32),
             # "angle_to_nest": Box(0.0, 1., (1,), np.float32),
+            'pheromone_sensors': Box(0.0, 1.0, (len(vision_segments) * PHEROMONE_TYPES,)),
             'vision_segments_wall_distances': Box(0.0, 1.0, (len(vision_segments), np.float32)),
             'vision_segments_food_distances': Box(0.0, 1.0,(len(vision_segments), np.float32)),
             'vision_segments_food_angles': Box(-1.0, 1., (len(vision_segments),)),
             # 'density_areas': Box(0.0, 1.0,(len(vision_segments) * len(view_ranges),)),
-            'pheromone_sensors': Box(0.0, 1.0,(len(vision_segments) * PHEROMONE_TYPES,)),
             # used when testing just the closest density sensors
             # 'density_areas': Box(0.0, 1.0, (len(vision_segments),)),
         }

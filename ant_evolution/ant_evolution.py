@@ -33,24 +33,21 @@ VERSION_TEXT = "small" if VERSION == "S" else "medium" if VERSION == "M" else "l
 INPUT_COORDINATES = [
     # (0., 0.0), # r_norm
     # (0., -0.5), # theta_norm
-    (-0.2, -0.1), # speed
-    (-0.1, -0.1), # theta
-    (0.1, -0.1),  # heartbeat
-    (-0.2, -0.1),  # travel_distance
-    (-0.2, -0.2), # current_energy
-    (0.2, -0.2), # carried_food
-    (0., -0.2), # ant_in_nest
-    (-0.2, -0.3),  # reward_sensor
-    (0.2, -0.3),  # penalty_sensor
+    (-0.2, -1.0), # speed
+    (-0.1, -1.0), # theta
+    (0.1, -1.0),  # heartbeat
+    (0.2, -1.0),  # travel_distance
+    (-0.2, -0.8), # current_energy
+    (0.2, -0.8), # carried_food
+    (0., -0.8), # ant_in_nest
+    (-0.2, -0.6),  # reward_sensor
+    (0.2, -0.6),  # penalty_sensor
     # (0.2, -0.35), # distance_to_nest
     # (0.2, -0.35), # angle_to_nest
 ]
 
 # depending on how many vision segments we use, compute their spacing in the substrate on x-axis
 vision_segments_x_coord = [-1. + i * 2./(len(vision_segments) - 1) for i in range(len(vision_segments))]
-INPUT_COORDINATES.extend([(x, -1.) for x in vision_segments_x_coord]) #vision_segments_wall_distances
-INPUT_COORDINATES.extend([(x, -0.8) for x in vision_segments_x_coord]) #vision_segments_food_distances
-INPUT_COORDINATES.extend([(x, -0.7) for x in vision_segments_x_coord]) #vision_segments_food_angles
 
 # provide density areas coordinates
 vision_ranges_y_coord = [-0.4 - 0.1 * i for i in range(len(view_ranges))]
@@ -59,16 +56,18 @@ vision_ranges_y_coord = [-0.4 - 0.1 * i for i in range(len(view_ranges))]
 
 # provide pheromones coordinates
 for x in vision_segments_x_coord:
-    INPUT_COORDINATES.extend([(x, -0.6 + (i * 0.05)) for i in range(PHEROMONE_TYPES)])  # pheromone coordinates for each vision segment
+    INPUT_COORDINATES.extend([(x, -0.2 - (i * 0.05)) for i in range(PHEROMONE_TYPES)])  # pheromone coordinates for each vision segment
 
-
+INPUT_COORDINATES.extend([(x, 0.0) for x in vision_segments_x_coord]) #vision_segments_wall_distances
+INPUT_COORDINATES.extend([(x, 0.2) for x in vision_segments_x_coord]) #vision_segments_food_distances
+INPUT_COORDINATES.extend([(x, 0.3) for x in vision_segments_x_coord]) #vision_segments_food_angles
 
 OUTPUT_COORDINATES = \
     [
-        (0., 0.5), # acceleration
-        (-0.5, 0.5), # turn left
-        (0.5, 0.5), #turn_right
-        (0., 0.2) # pheromone type
+        (0., 0.7), # acceleration
+        (-0.5, 0.7), # turn left
+        (0.5, 0.7), #turn_right
+        (0., 0.5) # pheromone type
     ]
 
 SUBSTRATE = Substrate(INPUT_COORDINATES, OUTPUT_COORDINATES)
@@ -336,14 +335,15 @@ if __name__ == "__main__":
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.INFO)
 
-    run_specificity="pheromone_test_1_food_13_ants_no_obstacles_40gen"
+    nr_gens = 40
+    run_specificity=f"pheromone_test_1_food_13_ants_no_obstacles_gen{nr_gens}"
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     current_run_directory = f"alg_runs/run_{timestamp}_{run_specificity}"
 
     # Run! Only relevant to look at the winner.
-    WINNER = run(40, make_ant_env, 1, VERSION, True, 13, False, os.path.join(current_run_directory, "plots"))[0]
+    WINNER = run(nr_gens, make_ant_env, 2, VERSION, True, 13, False, os.path.join(current_run_directory, "plots"))[0]
 
     os.makedirs(current_run_directory, exist_ok=True)
     # Save CPPN if wished reused and draw it + winner to file.
