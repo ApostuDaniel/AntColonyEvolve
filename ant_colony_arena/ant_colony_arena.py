@@ -49,6 +49,7 @@ AGENT_ACCELERATION = 3.0
 TURN_RATE = 0.3575  # Maximum turning rate observed in data (radians)
 
 NEST_RADIUS = SCREEN_W / 20
+DRAW_NEST_SENSORS = False
 
 SPEED_PENALTY_BASE = 1.5 ** (1 / AGENT_SPEED)
 
@@ -56,14 +57,16 @@ MAX_VISION_RANGE = 81
 MIDDLE_VISION_RANGE = 54
 MIN_VISION_RANGE = 27
 
-MAX_FOOD_QUANTITY = 100
-FOOD_SIZE_SCALING = 0.5
+MAX_FOOD_QUANTITY = 200
+FOOD_SIZE_SCALING = 0.3
 ANT_CARRY_CAPACITY = 50
 ANT_LIFE = 150
+SHOULD_FOOD_DECREASE = False
+SHOULD_FOOD_RESPAWN = True
 
 DRAW_ANT_VISION = True
 DRAW_PHEROMONES = False
-DRAW_FOOD_GRID = False
+DRAW_FOOD_GRID = True
 
 # 5 vision segments
 # vision_segments = [
@@ -640,7 +643,7 @@ class Ant():
         if not self.wall_collision:
             self.pos = vec2d(desired_pos[0], desired_pos[1])
 
-    def handle_food(self, food_sources, nest, agent):
+    def handle_food(self, food_sources, nest, agent, decrease_food_source=True):
         self.current_food = 0
         if self.in_nest and self.carried_food > 0:
             nest.register_food(self.carried_food, agent)
@@ -649,6 +652,7 @@ class Ant():
             for food_idx in self.food_in_eating_range:
                 if self.carried_food > ANT_CARRY_CAPACITY: break
                 x, y, quantity = food_sources[food_idx]
+                initial_quantity = quantity
                 if self.current_energy < ANT_LIFE:
                     extracted = min(quantity, ANT_LIFE - self.current_energy)
                     self.current_energy += extracted
@@ -659,7 +663,10 @@ class Ant():
                     self.carried_food += extracted
                     self.current_food += extracted
                     quantity -= extracted
+                if not decrease_food_source:
+                    quantity = initial_quantity
                 food_sources[food_idx] = (x, y, quantity)
+
 
     def handle_health(self):
         '''
@@ -887,7 +894,8 @@ class AntColonyEnv(ParallelEnv):
 
         # Add spatial grid
         self.food_grid = None
-        self.food_cell_size = MAX_VISION_RANGE
+        # add food radius to ensure that center of food is in square
+        self.food_cell_size = MAX_VISION_RANGE + (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING / 2)
 
         # Arena mask to stop pheromones diffusing outside of arena
         # self.arena_mask = np.zeros((self.grid_height, self.grid_width), dtype=np.float32)
@@ -983,7 +991,7 @@ class AntColonyEnv(ParallelEnv):
         self.window = None
         self.clock = None
 
-    def _respawn_food(self):
+    def _respawn_food(self, respawn_eaten_food=True):
         rng = np.random.default_rng()
         max_food_draw_radius = self.ant_arena.arena_radius * 0.9 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING) * 2
         min_food_draw_radius = self.ant_arena.arena_radius * 0.4
@@ -1006,7 +1014,7 @@ class AntColonyEnv(ParallelEnv):
                 self.food_sources.append((x, y, quantity))
                 # Add to food grid
                 self.food_grid.add_item(i, x, y)
-        else:
+        elif respawn_eaten_food:
             for i in range(len(self.food_sources)):
                 x, y, quantity = self.food_sources[i]
                 if quantity <= 0:
@@ -1102,7 +1110,7 @@ class AntColonyEnv(ParallelEnv):
         )
 
         # spawn food
-        self._respawn_food()
+        self._respawn_food(SHOULD_FOOD_RESPAWN)
 
         self.pheromone_grid = np.zeros((self.grid_height, self.grid_width, PHEROMONE_TYPES),
                                        dtype=np.float32)
@@ -1149,12 +1157,12 @@ class AntColonyEnv(ParallelEnv):
             self._render_frame
 
         # don't respawn food for pheromone training
-        self._respawn_food()
+        self._respawn_food(SHOULD_FOOD_RESPAWN)
         for agent, action in actions.items():
             self.ants[agent].set_action(action[:3])
             self.ants[agent].update()
             self.ants[agent].place_pheromone(action[3], self.pheromone_grid, self.grid_width, self.grid_height, self.cell_size)
-            self.ants[agent].handle_food(self.food_sources, self.nest, agent)
+            self.ants[agent].handle_food(self.food_sources, self.nest, agent, SHOULD_FOOD_DECREASE)
             # self.ants[agent].handle_health()
         self.t += 1
 
@@ -1381,7 +1389,7 @@ class AntColonyEnv(ParallelEnv):
             cell_size = self.food_cell_size
             pygame.draw.rect(
                 canvas,
-                (255, 0, 0),
+                (128, 0, 128),
                 (grid_i * cell_size, grid_j * cell_size, cell_size, cell_size)
             )
 
@@ -1520,17 +1528,18 @@ class AntColonyEnv(ParallelEnv):
                         1
                     )
 
-            # Draw distance indicator to nest
-            distance, angle_to_nest, _ = ant._detect_nest(self.nest)
-            nest_x = int(ant.pos.x + math.cos(angle_to_nest) * distance)
-            nest_y = int(ant.pos.y + math.sin(angle_to_nest) * distance)
-            pygame.draw.line(
-                canvas,
-                (0, 0, 0),  # black color for nearest ant distance
-                (int(ant.pos.x), int(ant.pos.y)),
-                (nest_x, nest_y),
-                1
-            )
+            if DRAW_NEST_SENSORS:
+                # Draw distance indicator to nest
+                distance, angle_to_nest, _ = ant._detect_nest(self.nest)
+                nest_x = int(ant.pos.x + math.cos(angle_to_nest) * distance)
+                nest_y = int(ant.pos.y + math.sin(angle_to_nest) * distance)
+                pygame.draw.line(
+                    canvas,
+                    (0, 0, 0),  # black color for nearest ant distance
+                    (int(ant.pos.x), int(ant.pos.y)),
+                    (nest_x, nest_y),
+                    1
+                )
 
             # Draw agent last; to ensure visibility.
             pygame.draw.rect(
@@ -1660,7 +1669,7 @@ class AntColonyEnv(ParallelEnv):
 
 
 if __name__ == "__main__":
-    env = AntColonyEnv(render_mode='human', nr_of_ants=13, nr_of_food=1)
+    env = AntColonyEnv(render_mode='human', nr_of_ants=1, nr_of_food=1)
 
     while True:
         total_reward = 0
@@ -1684,8 +1693,8 @@ if __name__ == "__main__":
                             env.reset()
                         if event.key == pygame.K_UP:    manual_action[0:3] = [0.1, 0.0, 0.0]
                         if event.key == pygame.K_DOWN:  manual_action[0:3] = [-0.1, 0.0, 0.0]
-                        if event.key == pygame.K_LEFT:  manual_action[1], manual_action[2] = 1.0, 0.0
-                        if event.key == pygame.K_RIGHT: manual_action[1], manual_action[2] = 0.0, 1.0
+                        if event.key == pygame.K_LEFT:  manual_action[1], manual_action[2] = 0.5, 0.0
+                        if event.key == pygame.K_RIGHT: manual_action[1], manual_action[2] = 0.0, 0.5
                     elif event.type == pygame.KEYUP:
                         if event.key == pygame.K_UP:    manual_action[0] = 0.0
                         if event.key == pygame.K_DOWN:  manual_action[0] = 0.0
