@@ -55,10 +55,10 @@ vision_ranges_y_coord = [-0.4 - 0.1 * i for i in range(len(view_ranges))]
 #     INPUT_COORDINATES.extend([(x, y) for x in vision_segments_x_coord])
 
 # provide pheromones coordinates
-pheromone_ranges_y_modifiers = [0.15 * i for i in range(len(pheromone_ranges))]
-for y_modifier in pheromone_ranges_y_modifiers:
-    for x in vision_segments_x_coord:
-        INPUT_COORDINATES.extend([(x, -0.2 - (i * 0.04) + y_modifier) for i in range(PHEROMONE_TYPES)])  # pheromone coordinates for each vision segment
+# pheromone_ranges_y_modifiers = [0.15 * i for i in range(len(pheromone_ranges))]
+# for y_modifier in pheromone_ranges_y_modifiers:
+#     for x in vision_segments_x_coord:
+#         INPUT_COORDINATES.extend([(x, -0.2 - (i * 0.04) + y_modifier) for i in range(PHEROMONE_TYPES)])  # pheromone coordinates for each vision segment
 
 INPUT_COORDINATES.extend([(x, 0.05) for x in vision_segments_x_coord]) #vision_segments_wall_distances
 INPUT_COORDINATES.extend([(x, 0.2) for x in vision_segments_x_coord]) #vision_segments_food_distances
@@ -330,8 +330,8 @@ if __name__ == "__main__":
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.INFO)
 
-    nr_gens = 20
-    run_specificity=f"pheromone_test_1_food_13_ants_no_obstacles_gen{nr_gens}"
+    nr_gens = 80
+    run_specificity=f"no_pheromone_test_5_food_13_ants_no_obstacles_gen{nr_gens}"
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
