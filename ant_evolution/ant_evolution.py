@@ -10,7 +10,7 @@ from neat import StdOutReporter
 import ant_colony_arena.ant_colony_arena as ant_arena
 import neat
 
-from ant_colony_arena.ant_colony_arena import vision_segments, view_ranges, PHEROMONE_TYPES
+from ant_colony_arena.ant_colony_arena import vision_segments, view_ranges, PHEROMONE_TYPES, pheromone_ranges
 from utils.neat_plot_reporter import PlotReporter
 
 from pureples.shared.visualize import draw_net
@@ -55,10 +55,12 @@ vision_ranges_y_coord = [-0.4 - 0.1 * i for i in range(len(view_ranges))]
 #     INPUT_COORDINATES.extend([(x, y) for x in vision_segments_x_coord])
 
 # provide pheromones coordinates
-for x in vision_segments_x_coord:
-    INPUT_COORDINATES.extend([(x, -0.2 - (i * 0.05)) for i in range(PHEROMONE_TYPES)])  # pheromone coordinates for each vision segment
+pheromone_ranges_y_modifiers = [0.15 * i for i in range(len(pheromone_ranges))]
+for y_modifier in pheromone_ranges_y_modifiers:
+    for x in vision_segments_x_coord:
+        INPUT_COORDINATES.extend([(x, -0.2 - (i * 0.04) + y_modifier) for i in range(PHEROMONE_TYPES)])  # pheromone coordinates for each vision segment
 
-INPUT_COORDINATES.extend([(x, 0.0) for x in vision_segments_x_coord]) #vision_segments_wall_distances
+INPUT_COORDINATES.extend([(x, 0.05) for x in vision_segments_x_coord]) #vision_segments_wall_distances
 INPUT_COORDINATES.extend([(x, 0.2) for x in vision_segments_x_coord]) #vision_segments_food_distances
 INPUT_COORDINATES.extend([(x, 0.3) for x in vision_segments_x_coord]) #vision_segments_food_angles
 
@@ -205,7 +207,7 @@ def run_es(gens, env_fun, trials, max_steps, config, params, substrate, single_n
     """
     Generic OpenAI Gym runner for ES-HyperNEAT.
     """
-
+    envs = None
     if not single_network_env:
         # Pre-create environments for all trials
         envs = [env_fun() for _ in range(trials)]
@@ -301,8 +303,9 @@ def run_es(gens, env_fun, trials, max_steps, config, params, substrate, single_n
     else:
         winner_one = pop.run(eval_fitness, gens)
 
-    for used_env in envs:
-        used_env.close()
+    if envs:
+        for used_env in envs:
+            used_env.close()
 
     return winner_one, (stats_one,)
 
@@ -327,7 +330,7 @@ if __name__ == "__main__":
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.INFO)
 
-    nr_gens = 60
+    nr_gens = 20
     run_specificity=f"pheromone_test_1_food_13_ants_no_obstacles_gen{nr_gens}"
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")

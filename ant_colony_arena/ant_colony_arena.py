@@ -32,8 +32,8 @@ logger.addHandler(handler)
 
 SIM_FPS = 60  # Simulation environment FPS
 
-SCREEN_W = 1200
-SCREEN_H = 1200
+SCREEN_W = 960
+SCREEN_H = 960
 BOUNDARY_SCALE = 0.01
 
 vec2d = namedtuple('vec2d', ['x', 'y'])
@@ -41,12 +41,12 @@ arena_sizes = namedtuple('arena_sizes', ['arena_center', 'arena_radius'])
 
 # Global parameters for agent control
 TIMESTEP = 1. / SIM_FPS  # Not sure if this will be necessary, given the fixed FPS?
-TIME_LIMIT = SIM_FPS * 12  # 12 seconds
+TIME_LIMIT = SIM_FPS * 10  # 12 seconds
 
-ANT_DIM = vec2d(5, 5)
-AGENT_SPEED = 7.00  # Maximum ant speed observed in data (pixels)
-AGENT_ACCELERATION = 2.50
-TURN_RATE = 0.3575  # Maximum turning rate observed in data (radians)
+ANT_DIM = vec2d(4, 4)
+AGENT_SPEED = 11.00  # Maximum ant speed observed in data (pixels)
+AGENT_ACCELERATION = 5.0
+TURN_RATE = 2 * 0.3575  # Maximum turning rate observed in data (radians)
 MAX_TRAVEL_PER_EPISODE = AGENT_SPEED * TIME_LIMIT
 
 NEST_RADIUS = SCREEN_W / 20
@@ -54,11 +54,11 @@ DRAW_NEST_SENSORS = False
 
 SPEED_PENALTY_BASE = 1.5 ** (1 / AGENT_SPEED)
 
-MAX_VISION_RANGE = 81
-MIDDLE_VISION_RANGE = 54
-MIN_VISION_RANGE = 27
+MAX_VISION_RANGE = 66
+MIDDLE_VISION_RANGE = 44
+MIN_VISION_RANGE = 22
 
-MAX_FOOD_QUANTITY = 200
+MAX_FOOD_QUANTITY = 150
 FOOD_SIZE_SCALING = 0.3
 ANT_CARRY_CAPACITY = 50
 ANT_LIFE = 150
@@ -94,13 +94,15 @@ vision_segments = [
     ((math.pi / 6, math.pi / 2), (0, 0, 255), 'forward_r1'),
 ]
 
-PHEROMONE_DETECTION_RANGE = MIN_VISION_RANGE / 1.5
+PHEROMONE_DETECTION_MAX_RANGE = MIN_VISION_RANGE
+PHEROMONE_DETECTION_MIN_RANGE = PHEROMONE_DETECTION_MAX_RANGE / 1.5
 PHEROMONE_TYPES = 3
 PHEROMONE_DECAY = 0.98
 PHEROMONE_DEPOSIT = 1.0
 MAX_DETECTABLE_PHEROMONE_CONCENTRATION = 2
 
 view_ranges = [MIN_VISION_RANGE, MIDDLE_VISION_RANGE, MAX_VISION_RANGE]
+pheromone_ranges = [PHEROMONE_DETECTION_MIN_RANGE ,PHEROMONE_DETECTION_MAX_RANGE]
 
 ##########################################
 #          Assistance functions          #
@@ -565,8 +567,8 @@ class Ant():
 
     def _detect_pheromones(self, pheromone_grid, cell_size):
         """Detect pheromones in each vision segment"""
-        # Initialize sensor array: 3 segments x 3 pheromone types
-        sensors = np.zeros((len(vision_segments), PHEROMONE_TYPES))
+        # Initialize sensor array: 2 ranges x 3 segments x 3 pheromone types
+        sensors = np.zeros((len(pheromone_ranges), len(vision_segments), PHEROMONE_TYPES))
 
         if pheromone_grid is None:
             return sensors
@@ -576,7 +578,7 @@ class Ant():
         grid_y = int(self.pos.y / cell_size)
 
         # Calculate search range
-        max_range = PHEROMONE_DETECTION_RANGE
+        max_range = PHEROMONE_DETECTION_MAX_RANGE
         grid_range = int(max_range / cell_size) + 1
 
         # Get grid bounds
@@ -607,35 +609,28 @@ class Ant():
                 if distance > max_range or distance < ANT_DIM.x:
                     continue
 
-                # # Calculate angle relative to ant's heading
-                # angle = math.atan2(dy, dx) - self.theta
-                # # Normalize angle to [-π, π]
-                # angle = (angle + math.pi) % (2 * math.pi) - math.pi
+                # Determine which range bin the cell belongs to
+                range_idx = None
+                for idx, r in enumerate(pheromone_ranges):
+                    if distance <= r:
+                        range_idx = idx
+                        break
+
+                # Skip if not in any range bin
+                if range_idx is None:
+                    continue
 
                 angle = math.atan2(dy, dx) % (2 * math.pi)
 
                 for start_angle, stop_angle, segment_idx in segment_boundaries:
                     if start_angle < stop_angle:
                         if start_angle <= angle <= stop_angle:
-                            sensors[segment_idx] += pheromone_grid[i, j]
+                            sensors[range_idx, segment_idx] += pheromone_grid[i, j]
                             break
                     elif angle >= start_angle or angle <= stop_angle:
                         # Angle wraps around 2π boundary
-                        sensors[segment_idx] += pheromone_grid[i, j]
+                        sensors[range_idx, segment_idx] += pheromone_grid[i, j]
                         break
-
-                # # Determine which segment the cell is in
-                # segment_idx = None
-                # if -math.pi / 2 <= angle <= -math.pi / 6:
-                #     segment_idx = 0  # Left segment
-                # elif -math.pi / 6 < angle < math.pi / 6:
-                #     segment_idx = 1  # Center segment
-                # elif math.pi / 6 <= angle <= math.pi / 2:
-                #     segment_idx = 2  # Right segment
-                #
-                # if segment_idx is not None:
-                #     # Add pheromone values to the corresponding segment
-                #     sensors[segment_idx] += pheromone_grid[i, j]
 
         return sensors
 
@@ -808,8 +803,8 @@ class Ant():
             int(ant_in_nest), # 1 if ant is in nest, 0 otherwise
             int(self.current_food > 0 or (self.carried_food > 0 and ant_in_nest)), # reward sensor
             int(int(self.wall_collision)), # penalty sensor
-            # nest_distance / (self.arena_radius * 2), # normalize to arena diameter, the maximum distance between ant and nest
-            # nest_angle / (2 * math.pi), # normalized angle to nest
+            nest_distance / (self.arena_radius * 2), # normalize to arena diameter, the maximum distance between ant and nest
+            nest_angle / (2 * math.pi), # normalized angle to nest
         ]
 
         result.extend(self.pheromone_sensors.flatten())
@@ -964,9 +959,9 @@ class AntColonyEnv(ParallelEnv):
             "ant_in_nest": Box(0., 1., (1, ) , np.float32),
             "reward_sensor": Box(0., 1., (1,), np.float32),
             "penalty_sensor": Box(0., 1., (1,), np.float32),
-            # "distance_to_nest": Box(0.0, 1., (1, ), np.float32),
-            # "angle_to_nest": Box(0.0, 1., (1,), np.float32),
-            'pheromone_sensors': Box(0.0, 1.0, (len(vision_segments) * PHEROMONE_TYPES,)),
+            "distance_to_nest": Box(0.0, 1., (1, ), np.float32),
+            "angle_to_nest": Box(0.0, 1., (1,), np.float32),
+            'pheromone_sensors': Box(0.0, 1.0, (len(pheromone_ranges) * len(vision_segments) * PHEROMONE_TYPES,)),
             'vision_segments_wall_distances': Box(0.0, 1.0, (len(vision_segments), np.float32)),
             'vision_segments_food_distances': Box(0.0, 1.0,(len(vision_segments), np.float32)),
             'vision_segments_food_angles': Box(-1.0, 1., (len(vision_segments),)),
@@ -1006,6 +1001,7 @@ class AntColonyEnv(ParallelEnv):
             return -100
 
         nest_reward = self.nest.food_register.get(agent, 0)
+        # - int(ant.wall_collision) / 10
         reward = nest_reward * 3 + ant.current_food
         ant.total_reward += reward
 
@@ -1356,7 +1352,7 @@ class AntColonyEnv(ParallelEnv):
                 grid_y = int(ant.pos.y / self.cell_size)
 
                 # Calculate search range
-                max_range = PHEROMONE_DETECTION_RANGE
+                max_range = PHEROMONE_DETECTION_MAX_RANGE
                 grid_range = int(max_range / self.cell_size) + 1
 
                 # Get grid bounds
@@ -1374,9 +1370,9 @@ class AntColonyEnv(ParallelEnv):
                         cell_x = (j + 0.5) * self.cell_size
                         cell_y = (i + 0.5) * self.cell_size
 
-                        colour = (255, 0, 0)
+                        r, g, b = 255, 0, 0
                         if np.sum(self.pheromone_grid[i, j]) >= 0.1:
-                            colour = (0, 255, 0)
+                            r, g, b = 0, 255, 0
 
                         # Calculate vector from ant to cell
                         dx = cell_x - ant.pos.x
@@ -1388,10 +1384,20 @@ class AntColonyEnv(ParallelEnv):
                         if distance > max_range or distance < ANT_DIM.x:
                             continue
 
-                        # # Calculate angle relative to ant's heading
-                        # angle = math.atan2(dy, dx) - self.theta
-                        # # Normalize angle to [-π, π]
-                        # angle = (angle + math.pi) % (2 * math.pi) - math.pi
+                        # Determine which range bin the cell belongs to
+                        range_idx = None
+                        for idx, pheromone_range in enumerate(pheromone_ranges):
+                            if distance <= pheromone_range:
+                                range_idx = idx
+                                break
+
+                        # Skip if not in any range bin
+                        if range_idx is None:
+                            continue
+
+                        # diferentiate colours between ranges by blue
+                        b = (200 * range_idx) % 256
+                        colour = (r, g, b)
 
                         angle = math.atan2(dy, dx) % (2 * math.pi)
 
@@ -1471,7 +1477,7 @@ class AntColonyEnv(ParallelEnv):
             (0, 0, 0)
         )
 
-    def draw_food(self, canvas: pygame.Surface):
+    def draw_food(self, canvas: pygame.Surface, font: pygame.font):
         # Draw food positions and size
         if self.food_sources is not None:
             for (x, y, quantity) in self.food_sources:
@@ -1480,9 +1486,18 @@ class AntColonyEnv(ParallelEnv):
                 food_size = int(max(2, quantity * FOOD_SIZE_SCALING))
                 pygame.draw.circle(
                     canvas,
-                    (180, 180, 180),
+                    (0, 102, 0),
                     (x, y),
                     food_size / 2
+                )
+
+                self._draw_text(
+                    canvas,
+                    font,
+                    x,
+                    y,
+                    f"{quantity}",
+                    (255, 255, 255)
                 )
 
     def draw_ant_vision(self, canvas: pygame.Surface, font: pygame.font):
@@ -1541,16 +1556,16 @@ class AntColonyEnv(ParallelEnv):
                     )
 
                 # draw arc for the pheromone detection range
-                view_range = PHEROMONE_DETECTION_RANGE
-                pygame.draw.arc(
-                    canvas,
-                    (255, 165, 0),# orange
-                    (int(ant.pos.x - view_range), int(ant.pos.y - view_range), view_range * 2,
-                     view_range * 2),
-                    # To align to pygame where angles increase clockwise, we needed to inverse the values
-                    -stop_angle,
-                    -start_angle
-                )
+                for range in pheromone_ranges:
+                    pygame.draw.arc(
+                        canvas,
+                        (255, 165, 0),# orange
+                        (int(ant.pos.x - range), int(ant.pos.y - range), range * 2,
+                         range * 2),
+                        # To align to pygame where angles increase clockwise, we needed to inverse the values
+                        -stop_angle,
+                        -start_angle
+                    )
 
     def draw_ants(self, canvas: pygame.Surface, font: pygame.font):
         # Draw nearest ant distance indicators
@@ -1675,7 +1690,7 @@ class AntColonyEnv(ParallelEnv):
 
         ### THEN DRAW FOOD SOURCES AT THEIR CURRENT POSITIONS
 
-        self.draw_food(canvas)
+        self.draw_food(canvas, font)
 
         if DRAW_ANT_VISION:
             self.draw_ant_vision(canvas, font)
@@ -1724,7 +1739,7 @@ if __name__ == "__main__":
         observations, infos = env.reset()
 
         manual_mode = True
-        manual_action = [0.0, 0.0, 0.0, 0.0]
+        manual_action = [0.0, 0.0, 0.0, -1.0]
 
         terminations = [False]
         truncations = [False]
