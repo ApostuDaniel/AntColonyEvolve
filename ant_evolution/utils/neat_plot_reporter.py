@@ -1,4 +1,5 @@
 import os
+import sys
 from datetime import datetime
 from pathlib import Path
 import tkinter as tk
@@ -19,6 +20,8 @@ class PlotReporter(BaseReporter):
 
     def __init__(self, show_species_detail, save_interval=None, plot_dir="../plots",
                  plot_filename_prefix="fitness_plot"):
+        self.log_file_path = os.path.join(plot_dir, "log.txt")
+        os.makedirs(plot_dir, exist_ok=True)
         self.show_species_detail = show_species_detail
         self.save_interval = save_interval
         self.plot_filename_prefix = plot_filename_prefix
@@ -85,9 +88,15 @@ class PlotReporter(BaseReporter):
         # Start the Tkinter event loop in a non-blocking way
         self.root.update()
 
+    def _write_info(self, output):
+        output_str = '\n'.join(output) + '\n'
+        sys.stdout.write(output_str)
+        with open(self.log_file_path, "a+") as log:
+            log.writelines(output_str)
+
     def start_generation(self, generation):
         self.generation = generation
-        print('\n ****** Running generation {0} ****** \n'.format(generation))
+        self._write_info(['\n ****** Running generation {0} ****** \n'.format(generation)])
         self.generation_start_time = time.time()
         # Reset data storage at the start of a new run
         if generation == 0:
@@ -101,12 +110,13 @@ class PlotReporter(BaseReporter):
     def end_generation(self, config, population, species_set):
         ng = len(population)
         ns = len(species_set.species)
+        output = []
         if self.show_species_detail:
-            print('Population of {0:d} members in {1:d} species:'.format(ng, ns))
+            output.append('Population of {0:d} members in {1:d} species:'.format(ng, ns))
             sids = list(iterkeys(species_set.species))
             sids.sort()
-            print("   ID   age  size  fitness  adj fit  stag")
-            print("  ====  ===  ====  =======  =======  ====")
+            output.append("   ID   age  size  fitness  adj fit  stag")
+            output.append("  ====  ===  ====  =======  =======  ====")
             for sid in sids:
                 s = species_set.species[sid]
                 a = self.generation - s.created
@@ -114,33 +124,36 @@ class PlotReporter(BaseReporter):
                 f = "--" if s.fitness is None else "{:.1f}".format(s.fitness)
                 af = "--" if s.adjusted_fitness is None else "{:.3f}".format(s.adjusted_fitness)
                 st = self.generation - s.last_improved
-                print(
-                    "  {: >4}  {: >3}  {: >4}  {: >7}  {: >7}  {: >4}".format(sid, a, n, f, af, st))
+                output.append("  {: >4}  {: >3}  {: >4}  {: >7}  {: >7}  {: >4}".format(sid, a, n, f, af, st))
         else:
-            print('Population of {0:d} members in {1:d} species'.format(ng, ns))
+            output.append('Population of {0:d} members in {1:d} species'.format(ng, ns))
 
         elapsed = time.time() - self.generation_start_time
         self.generation_times.append(elapsed)
         self.generation_times = self.generation_times[-10:]
         average = sum(self.generation_times) / len(self.generation_times)
-        print('Total extinctions: {0:d}'.format(self.num_extinctions))
+        output.append('Total extinctions: {0:d}'.format(self.num_extinctions))
         if len(self.generation_times) > 1:
-            print("Generation time: {0:.3f} sec ({1:.3f} average)".format(elapsed, average))
+            output.append("Generation time: {0:.3f} sec ({1:.3f} average)".format(elapsed, average))
         else:
-            print("Generation time: {0:.3f} sec".format(elapsed))
+            output.append("Generation time: {0:.3f} sec".format(elapsed))
+        self._write_info(output)
+
+
 
     def post_evaluate(self, config, population, species, best_genome):
         fitnesses = [c.fitness for c in itervalues(population)]
         fit_mean = mean(fitnesses)
         fit_std = stdev(fitnesses)
         best_species_id = species.get_species_id(best_genome.key)
-        print('Population\'s average fitness: {0:3.5f} stdev: {1:3.5f}'.format(fit_mean, fit_std))
-        print(
-            'Best fitness: {0:3.5f} - size: {1!r} - species {2} - id {3}'.format(best_genome.fitness,
+        output = []
+        output.append('Population\'s average fitness: {0:3.5f} stdev: {1:3.5f}'.format(fit_mean, fit_std))
+        output.append('Best fitness: {0:3.5f} - size: {1!r} - species {2} - id {3}'.format(best_genome.fitness,
                                                                                  best_genome.size(),
                                                                                  best_species_id,
                                                                                  best_genome.key))
 
+        self._write_info(output)
         # Store data for population fitness plot
         self.generation_numbers.append(self.generation)
         self.best_fitness.append(best_genome.fitness)
@@ -237,15 +250,15 @@ class PlotReporter(BaseReporter):
 
     def complete_extinction(self):
         self.num_extinctions += 1
-        print('All species extinct.')
+        self._write_info(['All species extinct.'])
 
     def found_solution(self, config, generation, best):
-        print('\nBest individual in generation {0} meets fitness threshold - complexity: {1!r}'.format(
-            self.generation, best.size()))
+        self._write_info(['\nBest individual in generation {0} meets fitness threshold - complexity: {1!r}'.format(
+            self.generation, best.size())])
 
     def species_stagnant(self, sid, species):
         if self.show_species_detail:
-            print("\nSpecies {0} with {1} members is stagnated: removing it".format(sid, len(species.members)))
+            self._write_info(["\nSpecies {0} with {1} members is stagnated: removing it".format(sid, len(species.members))])
 
     def info(self, msg):
-        print(msg)
+        self._write_info([msg])
