@@ -44,7 +44,7 @@ TIMESTEP = 1. / SIM_FPS  # Not sure if this will be necessary, given the fixed F
 TIME_LIMIT = SIM_FPS * 10  # 12 seconds
 
 ANT_DIM = vec2d(4, 4)
-AGENT_SPEED = 11.00  # Maximum ant speed observed in data (pixels)
+AGENT_SPEED = 13.00  # Maximum ant speed observed in data (pixels)
 AGENT_ACCELERATION = 5.0
 TURN_RATE = 2 * 0.3575  # Maximum turning rate observed in data (radians)
 MAX_TRAVEL_PER_EPISODE = AGENT_SPEED * TIME_LIMIT
@@ -62,11 +62,12 @@ MAX_FOOD_QUANTITY = 150
 FOOD_SIZE_SCALING = 0.3
 ANT_CARRY_CAPACITY = 50
 ANT_LIFE = 150
-SHOULD_FOOD_DECREASE = False
+SHOULD_FOOD_DECREASE = True
 SHOULD_FOOD_RESPAWN = True
 
-DRAW_ANT_VISION = True
-DRAW_PHEROMONES = False
+DRAW_ANT_VISION = False
+DRAW_PHEROMONES = True
+DRAW_PHEROMONE_VISION = False
 DRAW_FOOD_GRID = False
 
 # 5 vision segments
@@ -688,7 +689,7 @@ class Ant():
             self.carried_food = 0
         else:
             for food_idx in self.food_in_eating_range:
-                if self.carried_food > ANT_CARRY_CAPACITY: break
+                if self.carried_food >= ANT_CARRY_CAPACITY: break
                 x, y, quantity = food_sources[food_idx]
                 initial_quantity = quantity
                 if self.current_energy < ANT_LIFE:
@@ -706,17 +707,17 @@ class Ant():
                 food_sources[food_idx] = (x, y, quantity)
 
 
-    def handle_health(self):
+    def handle_health(self, turn_left, turn_right):
         '''
         Remove from the agents food, then health at every timestep
         Refresh energy if ant in nest
         :return:
         '''
-        # if self.in_nest and self.current_energy < ANT_LIFE:
-        #     self.current_energy = min(ANT_LIFE, int(self.current_energy + (ANT_LIFE / 45)))
-        #     return
+        if self.in_nest and self.current_energy < ANT_LIFE and self.carried_food > 0:
+            self.current_energy = ANT_LIFE
+            return
 
-        health_lost = speed_penalty_square(self.speed) + int(self.wall_collision) # decrease extra if colliding with wall
+        health_lost = speed_penalty_square(self.speed) + rotation_penalty_square(turn_right, turn_left) + int(self.wall_collision) # decrease extra if colliding with wall
         if self.carried_food >= health_lost:
             self.carried_food -= health_lost
         else:
@@ -881,7 +882,19 @@ def speed_penalty_square(speed):
     :param speed: agents current abs speed
     :return: how much the reward should diminish
     """
-    return ((abs(speed) ** 2) / (AGENT_SPEED ** 2)) / 3
+    return ((abs(speed) ** 2) / (AGENT_SPEED ** 2)) / 4
+
+def rotation_penalty_square(turn_right, turn_left):
+    """
+    Penalty based on how much the agent changes direction
+    :param turn_right: how much the agent wants to turn right.(-1, 1)
+    :param turn_left: how much the agent wants to turn left.(-1, 1)
+    :return: how much the reward should diminish
+    """
+    # if turn_right 1 and turn_left -1, max value in abs would be 2
+    return (abs(turn_right - turn_left) ** 2) / (2 ** 2)
+
+
 
 class AntColonyEnv(ParallelEnv):
     metadata = {
@@ -1011,9 +1024,9 @@ class AntColonyEnv(ParallelEnv):
             ant.total_reward -= 100
             return -100
 
+        # turn_left, turn_right = actions[1:3]
         nest_reward = self.nest.food_register.get(agent, 0)
-        # - int(ant.wall_collision) / 10
-        reward = nest_reward * 3 + ant.current_food
+        reward = nest_reward * 5 + ant.current_food * 0.8
         ant.total_reward += reward
 
         return reward
@@ -1034,8 +1047,8 @@ class AntColonyEnv(ParallelEnv):
 
     def _respawn_food(self, respawn_eaten_food=True):
         rng = np.random.default_rng()
-        max_food_draw_radius = (self.ant_arena.arena_radius * 2) * 0.9 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING) * 2
-        min_food_draw_radius = (self.ant_arena.arena_radius * 2) * 0.4
+        max_food_draw_radius = (self.ant_arena.arena_radius * 2) * 0.5 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING) * 2
+        min_food_draw_radius = (self.ant_arena.arena_radius * 2) * 0.3
         # max_food_draw_radius = self.nest.radius * 8 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING) * 2
 
         def get_rand_food_params():
@@ -1125,8 +1138,8 @@ class AntColonyEnv(ParallelEnv):
         # spawn nest
         # max_nest_draw_radius = self.ant_arena.arena_radius * 0.20 - NEST_RADIUS * 2
         # draw in center
-        max_nest_draw_radius = self.ant_arena.arena_radius * 0.90
-        min_nest_draw_radius = self.ant_arena.arena_radius * 0.70
+        max_nest_draw_radius = self.ant_arena.arena_radius * 0.1
+        min_nest_draw_radius = self.ant_arena.arena_radius * 0.0
         while True:
             x, y = rng.uniform(-max_nest_draw_radius, max_nest_draw_radius, size=2)
             x, y = (int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y))
@@ -1217,8 +1230,8 @@ class AntColonyEnv(ParallelEnv):
             self.ants[agent].set_action(action[:3])
             self.ants[agent].update()
             self.ants[agent].place_pheromone(action[3], self.pheromone_grid, self.grid_width, self.grid_height, self.cell_size)
+            self.ants[agent].handle_health(action[1], action[2])
             self.ants[agent].handle_food(self.food_sources, self.nest, agent, SHOULD_FOOD_DECREASE)
-            # self.ants[agent].handle_health()
         self.t += 1
 
         # terminate ants that have run out of energy
@@ -1299,7 +1312,7 @@ class AntColonyEnv(ParallelEnv):
 
         def draw_grid_lines():
             # Draw grid lines only within the bounding square
-            grid_color = (100, 100, 100, 255)  # Semi-transparent gray
+            grid_color = (180, 180, 180)  # Semi-transparent gray
 
             # Vertical lines
             for i in range(grid_left, grid_right + 1):
@@ -1507,7 +1520,7 @@ class AntColonyEnv(ParallelEnv):
                     font,
                     x,
                     y,
-                    f"{quantity}",
+                    f"{int(quantity)}",
                     (255, 255, 255)
                 )
 
@@ -1578,29 +1591,30 @@ class AntColonyEnv(ParallelEnv):
                         -start_angle
                     )
 
-    def draw_ants(self, canvas: pygame.Surface, font: pygame.font):
+    def draw_ants(self, canvas: pygame.Surface, font: pygame.font, draw_ant_vision=True):
         # Draw nearest ant distance indicators
         for agent in self.agents:
             ant = self.ants[agent]
-            for segment_idx, distance in ant.nearest_food_distances.items():
-                angle = ant.nearest_food_angles[segment_idx]
-                angle = angle * (2 * math.pi) # denormalize angle, from (0, 1) interval
-                if distance is not None and distance < 1.0:
-                    # Calculate the central angle of the segment
-                    angle_range, segment_color, _ = vision_segments[segment_idx]
+            if draw_ant_vision:
+                for segment_idx, distance in ant.nearest_food_distances.items():
+                    angle = ant.nearest_food_angles[segment_idx]
+                    angle = angle * (2 * math.pi) # denormalize angle, from (0, 1) interval
+                    if distance is not None and distance < 1.0:
+                        # Calculate the central angle of the segment
+                        angle_range, segment_color, _ = vision_segments[segment_idx]
 
-                    # Calculate end point based on nearest food distance
-                    end_x = int(ant.pos.x + math.cos(angle) * distance * MAX_VISION_RANGE)
-                    end_y = int(ant.pos.y + math.sin(angle) * distance * MAX_VISION_RANGE)
+                        # Calculate end point based on nearest food distance
+                        end_x = int(ant.pos.x + math.cos(angle) * distance * MAX_VISION_RANGE)
+                        end_y = int(ant.pos.y + math.sin(angle) * distance * MAX_VISION_RANGE)
 
-                    # Draw a line from the ant to the nearest food
-                    pygame.draw.line(
-                        canvas,
-                        segment_color,  # segment color for nearest ant distance
-                        (int(ant.pos.x), int(ant.pos.y)),
-                        (end_x, end_y),
-                        1
-                    )
+                        # Draw a line from the ant to the nearest food
+                        pygame.draw.line(
+                            canvas,
+                            segment_color,  # segment color for nearest ant distance
+                            (int(ant.pos.x), int(ant.pos.y)),
+                            (end_x, end_y),
+                            1
+                        )
 
             if DRAW_NEST_SENSORS:
                 # Draw distance indicator to nest
@@ -1695,7 +1709,7 @@ class AntColonyEnv(ParallelEnv):
         if DRAW_FOOD_GRID:
             self.draw_food_grid(canvas)
 
-        self.draw_pheromone_grid(canvas, DRAW_PHEROMONES)
+        self.draw_pheromone_grid(canvas, DRAW_PHEROMONES, DRAW_PHEROMONE_VISION)
 
         self.draw_nest(canvas, font)
 
@@ -1727,7 +1741,7 @@ class AntColonyEnv(ParallelEnv):
         #             1
         #         )
 
-        self.draw_ants(canvas, font)
+        self.draw_ants(canvas, font, DRAW_ANT_VISION)
 
         if self.render_mode == 'human':
             self.window.blit(canvas, canvas.get_rect())
@@ -1755,7 +1769,7 @@ if __name__ == "__main__":
         terminations = [False]
         truncations = [False]
         done = False
-        while env.agents and not any(terminations) and not any(truncations):
+        while env.agents and not (all(terminations) or any(truncations)):
             if manual_mode:
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
