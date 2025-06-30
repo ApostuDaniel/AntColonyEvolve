@@ -262,3 +262,28 @@ class PlotReporter(BaseReporter):
 
     def info(self, msg):
         self._write_info([msg])
+
+    def close(self):
+        """Close all figures and release resources to enable pickling"""
+        plt.close(self.fig)
+        plt.close(self.fig2)
+
+        # If using Tkinter directly
+        if hasattr(self, 'root'):
+            self.root.destroy()
+            self.root.quit()
+
+        # Ensure matplotlib releases resources
+        plt.close('all')
+
+        # Clear references to GUI objects
+        if hasattr(self, 'fig'):
+            del self.fig
+        if hasattr(self, 'fig2'):
+            del self.fig2
+        if hasattr(self, 'root'):
+            del self.root
+        if hasattr(self, 'canvas1'):
+            del self.canvas1
+        if hasattr(self, 'canvas2'):
+            del self.canvas2
