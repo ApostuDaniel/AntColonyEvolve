@@ -345,11 +345,11 @@ if __name__ == "__main__":
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.INFO)
 
-    nr_gens = 140
+    nr_gens = 400
     # load_population_path = "./alg_runs/run_2025-06-30_18-14-26_no_pheromone_test_5_food_13_ants_no_obstacles_no_health_deacrease_gen1/es_hyperneat_ant_evolution_medium_population.pkl"
     load_population_path = None
     save_population = True
-    run_specificity=f"center_nest_no_pheromone_5_food_13_ants_no_obstacles_health_deacrease_gen{nr_gens}"
+    run_specificity=f"center_nest_no_pheromone_5_food_13_ants_no_obstacles_health_decreases_before_food_gen{nr_gens}"
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 

@@ -43,7 +43,7 @@ arena_sizes = namedtuple('arena_sizes', ['arena_center', 'arena_radius'])
 TIMESTEP = 1. / SIM_FPS  # Not sure if this will be necessary, given the fixed FPS?
 TIME_LIMIT = SIM_FPS * 10  # 12 seconds
 
-ANT_DIM = vec2d(4, 4)
+ANT_DIM = vec2d(7, 7)
 AGENT_SPEED = 13.00  # Maximum ant speed observed in data (pixels)
 AGENT_ACCELERATION = 5.0
 TURN_RATE = 2 * 0.3575  # Maximum turning rate observed in data (radians)
@@ -54,21 +54,23 @@ DRAW_NEST_SENSORS = False
 
 SPEED_PENALTY_BASE = 1.5 ** (1 / AGENT_SPEED)
 
-MAX_VISION_RANGE = 66
-MIDDLE_VISION_RANGE = 44
-MIN_VISION_RANGE = 22
+MAX_VISION_RANGE = ANT_DIM.x * 16
+MIDDLE_VISION_RANGE = int(MAX_VISION_RANGE * (2/3))
+MIN_VISION_RANGE = int(MAX_VISION_RANGE * (1/3))
 
 MAX_FOOD_QUANTITY = 150
 FOOD_SIZE_SCALING = 0.3
-ANT_CARRY_CAPACITY = 50
+ANT_CARRY_CAPACITY = 30
 ANT_LIFE = 150
 SHOULD_FOOD_DECREASE = True
 SHOULD_FOOD_RESPAWN = True
 
-DRAW_ANT_VISION = False
+DRAW_ANT_VISION = True
+DRAW_FOOD_DENSITY = False
 DRAW_PHEROMONES = True
-DRAW_PHEROMONE_VISION = False
+DRAW_PHEROMONE_VISION = True
 DRAW_FOOD_GRID = False
+HIGHLIGHT_BEST_ANT = False
 
 # 5 vision segments
 # vision_segments = [
@@ -692,11 +694,11 @@ class Ant():
                 if self.carried_food >= ANT_CARRY_CAPACITY: break
                 x, y, quantity = food_sources[food_idx]
                 initial_quantity = quantity
-                if self.current_energy < ANT_LIFE:
-                    extracted = min(quantity, ANT_LIFE - self.current_energy)
-                    self.current_energy += extracted
-                    self.current_food += extracted
-                    quantity -= extracted
+                # if self.current_energy < ANT_LIFE:
+                #     extracted = min(quantity, ANT_LIFE - self.current_energy)
+                #     self.current_energy += extracted
+                #     self.current_food += extracted
+                #     quantity -= extracted
                 if quantity > 0 and self.carried_food < ANT_CARRY_CAPACITY:
                     extracted = min(quantity, ANT_CARRY_CAPACITY - self.carried_food)
                     self.carried_food += extracted
@@ -718,11 +720,19 @@ class Ant():
             return
 
         health_lost = speed_penalty_square(self.speed) + rotation_penalty_square(turn_right, turn_left) + int(self.wall_collision) # decrease extra if colliding with wall
-        if self.carried_food >= health_lost:
-            self.carried_food -= health_lost
+        # if self.carried_food >= health_lost:
+        #     self.carried_food -= health_lost
+        # else:
+        #     self.current_energy -= (health_lost - self.carried_food)
+        #     self.carried_food = 0
+
+        if self.current_energy >= health_lost:
+            self.current_energy -= health_lost
         else:
-            self.current_energy -= (health_lost - self.carried_food)
-            self.carried_food = 0
+            self.carried_food -= health_lost
+            if self.carried_food < 0: #subtract the remaining health
+                self.current_energy += self.carried_food
+                self.carried_food = 0
 
     def place_pheromone(self, pheromone_action, pheromone_grid, grid_width, grid_height, cell_size):
         grid_x = int(self.pos.x / cell_size)
@@ -1524,7 +1534,7 @@ class AntColonyEnv(ParallelEnv):
                     (255, 255, 255)
                 )
 
-    def draw_ant_vision(self, canvas: pygame.Surface, font: pygame.font):
+    def draw_ant_vision(self, canvas: pygame.Surface, font: pygame.font, draw_food_density=True):
         for segment_idx, ((angle_range_start, angle_range_end), colour, _) in enumerate(vision_segments):
             for agent in self.agents:
                 ant = self.ants[agent]
@@ -1554,42 +1564,44 @@ class AntColonyEnv(ParallelEnv):
                     )
                 )
 
-                for vision_idx, view_range in enumerate(view_ranges):
-                    # compute distance to the center of each area
-                    draw_distance = view_range / 2 if vision_idx <= 0 \
-                        else view_ranges[vision_idx - 1] + (view_range - view_ranges[vision_idx - 1]) / 2
-                    # display food density
-                    self._draw_text(
-                        canvas,
-                        font,
-                        int(ant.pos.x + np.cos(central_angle) * draw_distance),
-                        int(ant.pos.y + np.sin(central_angle) * draw_distance),
-                        f"{round(ant.density_areas[segment_idx][vision_idx]['food'], 2)}",
-                        (0, 0, 0)
-                    )
+                if draw_food_density:
+                    for vision_idx, view_range in enumerate(view_ranges):
+                        # compute distance to the center of each area
+                        draw_distance = view_range / 2 if vision_idx <= 0 \
+                            else view_ranges[vision_idx - 1] + (view_range - view_ranges[vision_idx - 1]) / 2
+                        # display food density
+                        self._draw_text(
+                            canvas,
+                            font,
+                            int(ant.pos.x + np.cos(central_angle) * draw_distance),
+                            int(ant.pos.y + np.sin(central_angle) * draw_distance),
+                            f"{round(ant.density_areas[segment_idx][vision_idx]['food'], 2)}",
+                            (0, 0, 0)
+                        )
 
-                    # Draw arcs delimiting the vision ranges and density areas
-                    pygame.draw.arc(
-                        canvas,
-                        colour,
-                        (int(ant.pos.x - view_range), int(ant.pos.y - view_range), view_range * 2,
-                         view_range * 2),
-                        # To align to pygame where angles increase clockwise, we needed to inverse the values
-                        -stop_angle,
-                        -start_angle
-                    )
+                        # Draw arcs delimiting the vision ranges and density areas
+                        pygame.draw.arc(
+                            canvas,
+                            colour,
+                            (int(ant.pos.x - view_range), int(ant.pos.y - view_range), view_range * 2,
+                             view_range * 2),
+                            # To align to pygame where angles increase clockwise, we needed to inverse the values
+                            -stop_angle,
+                            -start_angle
+                        )
 
-                # draw arc for the pheromone detection range
-                for range in pheromone_ranges:
-                    pygame.draw.arc(
-                        canvas,
-                        (255, 165, 0),# orange
-                        (int(ant.pos.x - range), int(ant.pos.y - range), range * 2,
-                         range * 2),
-                        # To align to pygame where angles increase clockwise, we needed to inverse the values
-                        -stop_angle,
-                        -start_angle
-                    )
+                if DRAW_PHEROMONE_VISION:
+                    # draw arc for the pheromone detection range
+                    for range in pheromone_ranges:
+                        pygame.draw.arc(
+                            canvas,
+                            (255, 165, 0),# orange
+                            (int(ant.pos.x - range), int(ant.pos.y - range), range * 2,
+                             range * 2),
+                            # To align to pygame where angles increase clockwise, we needed to inverse the values
+                            -stop_angle,
+                            -start_angle
+                        )
 
     def draw_ants(self, canvas: pygame.Surface, font: pygame.font, draw_ant_vision=True):
         # Draw nearest ant distance indicators
@@ -1704,7 +1716,8 @@ class AntColonyEnv(ParallelEnv):
 
         self.draw_arena(canvas)
 
-        self.highlight_best_ant(canvas)
+        if HIGHLIGHT_BEST_ANT:
+            self.highlight_best_ant(canvas)
 
         if DRAW_FOOD_GRID:
             self.draw_food_grid(canvas)
@@ -1718,7 +1731,7 @@ class AntColonyEnv(ParallelEnv):
         self.draw_food(canvas, font)
 
         if DRAW_ANT_VISION:
-            self.draw_ant_vision(canvas, font)
+            self.draw_ant_vision(canvas, font, DRAW_FOOD_DENSITY)
 
         # Draw wall distance indicators
         # for segment_idx, distance in self.ant.wall_distances.items():
@@ -1757,7 +1770,7 @@ class AntColonyEnv(ParallelEnv):
 
 
 if __name__ == "__main__":
-    env = AntColonyEnv(render_mode='human', nr_of_ants=13, nr_of_food=5)
+    env = AntColonyEnv(render_mode='human', nr_of_ants=1, nr_of_food=5)
 
     while True:
         total_reward = 0

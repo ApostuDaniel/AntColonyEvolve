@@ -41,7 +41,7 @@ if __name__ == "__main__":
     env = ant_arena.AntColonyEnv(13, 5, render_mode='human')
     env.reset()
 
-    best_agent_file= "alg_runs/run_2025-06-30_18-26-06_center_nest_no_pheromone_5_food_13_ants_no_obstacles_health_deacrease_gen140/es_hyperneat_ant_evolution_medium_cppn.pkl"
+    best_agent_file= "alg_runs/run_2025-07-01_00-26-20_center_nest_no_pheromone_5_food_13_ants_no_obstacles_health_decreases_before_food_gen400/es_hyperneat_ant_evolution_medium_cppn.pkl"
     CPPN = []
     with open(best_agent_file, 'rb') as file:
         CPPN = pickle.load(file)
