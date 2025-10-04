@@ -1,41 +1,17 @@
-import logging
-import os
 import pickle
-from datetime import datetime
 
 import numpy as np
-from neat import StdOutReporter
 
-import ant_colony_arena.ant_colony_arena as ant_arena
-import neat
-from utils.neat_plot_reporter import PlotReporter
-
-from pureples.shared.visualize import draw_net
-from pureples.shared.substrate import Substrate
 from pureples.es_hyperneat.es_hyperneat import ESNetwork
-from ant_evolution import VERSION, params, SUBSTRATE
+from pureples.shared.substrate import Substrate
 
-# INPUT_COORDINATES = [
-#     (0.0, 0.0), # r_norm
-#     (0.0, -0.1), # theta_norm
-#     (0.0, -0.2), # speed
-#     (0.0, -0.3), # theta
-#     (-1, -1.), (-0.5, -1.),(0, -1.), (0.5, -1.), (1, -1.), #vision_segments_wall_distances
-#     (-1, -0.8), (-0.5, -0.8),(0, -0.8), (0.5, -0.8), (1, -0.8),  # vision_segments_food_distances
-#     (-1, -0.7), (-0.5, -0.7),(0, -0.7), (0.5, -0.7), (1, -0.7),  # vision_segments_food_angles
-#     # (-0.7, -0.4), (-0.35, -0.4), (0, -0.4), (0.35, -0.4), (0.7, -0.4),  # density_area_close
-#     # (-0.8, -0.5), (-0.4, -0.5), (0, -0.5), (0.4, -0.5), (0.8, -0.5),  # density_area_middle
-#     # (-0.9, -0.6), (-0.6, -0.6), (0, -0.6), (0.6, -0.6), (0.9, -0.6),  # density_area_far
-# ]
-#
-# OUTPUT_COORDINATES = \
-#     [
-#         (0, 0.5), # acceleration
-#         (-0.5, 0.5), # turn left
-#         (0.5, 0.5) #turn_right
-#     ]
-#
-# SUBSTRATE = Substrate(INPUT_COORDINATES, OUTPUT_COORDINATES)
+from configs.evolution_config import VERSION, VERSION_TEXT, get_input_coordinates, get_output_coordinates, params
+import ant_colony_arena as ant_arena
+
+
+INPUT_COORDINATES = get_input_coordinates()
+OUTPUT_COORDINATES = get_output_coordinates()
+SUBSTRATE = Substrate(INPUT_COORDINATES, OUTPUT_COORDINATES)
 
 if __name__ == "__main__":
     env = ant_arena.AntColonyEnv(13, 5, render_mode='human')
