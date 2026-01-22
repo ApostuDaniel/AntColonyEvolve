@@ -84,8 +84,10 @@ def circle_transformation(circle_a, circle_b):
 
     return (dx, dy), scale * scale_factor
 
+
 def compute_distance(x1, y1, x2, y2):
     return math.hypot(x1 - x2, y1 - y2)
+
 
 def is_rectangle_in_circle(x, y, length, circle_center, circle_radius, fully_contained=True):
     """
@@ -219,6 +221,7 @@ class SpatialGrid:
                 item_ids.extend(self.grid[i][j])
         return item_ids
 
+
 ##########################################
 #            Ant Environment             #
 ##########################################
@@ -321,7 +324,6 @@ class Ant():
 
         return scaled_distance
 
-
     def _detect_distances(self, detected_food):
         """
         Detect distances to walls and ants.
@@ -332,8 +334,8 @@ class Ant():
             central_angle = ((self.theta + sum(angle_range) / 2) % (2 * math.pi))
 
             # Initialize scaled distances
-            food_distance_scaled = 1.0 # outside of vision range
-            food_angle = -1 # outside allowed angle range(0, 2 * math.pi), to show nothing is detected
+            food_distance_scaled = 1.0  # outside of vision range
+            food_angle = -1  # outside allowed angle range(0, 2 * math.pi), to show nothing is detected
 
             # Get wall distance
             # compute_distance_to_wall already returns the distance scaled
@@ -344,7 +346,8 @@ class Ant():
             if food_in_segment:
                 # Use generator expression instead of list comprehension for efficiency
                 raw_food_distance, food_angle, food_radius = min(
-                    ((math.hypot(food[0] - self.pos.x, food[1] - self.pos.y) - food[3], food[2], food[3]) # distance to food center minus food radius
+                    ((math.hypot(food[0] - self.pos.x, food[1] - self.pos.y) - food[3], food[2], food[3])
+                     # distance to food center minus food radius
                      for food in food_in_segment),
                     key=lambda x: x[0],
                     default=None
@@ -464,7 +467,7 @@ class Ant():
             food_radius = food_size / 2
             eating_range_squared = (ANT_DIM.x + food_radius) ** 2
             if distance_squared <= eating_range_squared:
-                #Mark food as eaten
+                # Mark food as eaten
                 food_in_eating_range.append(i)
 
             fitting_view_range_idx = self._get_fitting_vision_range_index(distance_squared, view_ranges, food_radius)
@@ -490,7 +493,6 @@ class Ant():
 
         return detected_food, density_areas, food_in_eating_range
 
-
     def _detect_pheromones(self, pheromone_grid, cell_size):
         """Detect pheromones in each vision segment"""
         # Initialize sensor array: 2 ranges x 3 segments x 3 pheromone types
@@ -515,7 +517,7 @@ class Ant():
 
         # Pre-calculate segment boundaries once
         segment_boundaries = self._get_segment_boundaries()
-        ranges_squared = [r**2 for r in pheromone_ranges]
+        ranges_squared = [r ** 2 for r in pheromone_ranges]
         max_range_squared = max(ranges_squared)
         dim_squared = ANT_DIM.x ** 2
         for i in range(min_i, max_i):
@@ -601,11 +603,11 @@ class Ant():
         # Set the desired position based on direction and speed relative to timestep
         desired_pos = np.add(np.array(self.pos), direction)
         # If leaving the circle, push agent back into circle.
-        self.wall_collision = not is_rectangle_in_circle(desired_pos[0], desired_pos[1], ANT_DIM.x, self.arena_center, self.arena_radius)
+        self.wall_collision = not is_rectangle_in_circle(desired_pos[0], desired_pos[1], ANT_DIM.x, self.arena_center,
+                                                         self.arena_radius)
         if not self.wall_collision:
             self.traveled_distance += compute_distance(self.pos.x, self.pos.y, desired_pos[0], desired_pos[1])
             self.pos = vec2d(desired_pos[0], desired_pos[1])
-
 
     def handle_food(self, food_sources, nest, agent, decrease_food_source=True):
         self.current_food = 0
@@ -631,7 +633,6 @@ class Ant():
                     quantity = initial_quantity
                 food_sources[food_idx] = (x, y, quantity)
 
-
     def handle_health(self, turn_left, turn_right):
         '''
         Remove from the agents food, then health at every timestep
@@ -642,7 +643,8 @@ class Ant():
             self.current_energy = ANT_LIFE
             return
 
-        health_lost = speed_penalty_square(self.speed) + rotation_penalty_square(turn_right, turn_left) + int(self.wall_collision) # decrease extra if colliding with wall
+        health_lost = speed_penalty_square(self.speed) + rotation_penalty_square(turn_right, turn_left) + int(
+            self.wall_collision)  # decrease extra if colliding with wall
         # if self.carried_food >= health_lost:
         #     self.carried_food -= health_lost
         # else:
@@ -653,7 +655,7 @@ class Ant():
             self.current_energy -= health_lost
         else:
             self.carried_food -= health_lost
-            if self.carried_food < 0: #subtract the remaining health
+            if self.carried_food < 0:  # subtract the remaining health
                 self.current_energy += self.carried_food
                 self.carried_food = 0
 
@@ -742,14 +744,15 @@ class Ant():
             self.speed / AGENT_SPEED,  # Normalized current speed
             self.theta / (2 * math.pi),  # Normalized current orientation
             time / (TIME_LIMIT * SIM_FPS),  # HEARTBEAT
-            self.traveled_distance / MAX_TRAVEL_PER_EPISODE, # normalized travel distance
-            self.current_energy / ANT_LIFE, # normalized health
-            self.carried_food / ANT_CARRY_CAPACITY, # normalize food carry
-            int(ant_in_nest), # 1 if ant is in nest, 0 otherwise
-            int(self.current_food > 0 or (self.carried_food > 0 and ant_in_nest)), # reward sensor
-            int(int(self.wall_collision)), # penalty sensor
-            nest_distance / (self.arena_radius * 2), # normalize to arena diameter, the maximum distance between ant and nest
-            nest_angle / (2 * math.pi), # normalized angle to nest
+            self.traveled_distance / MAX_TRAVEL_PER_EPISODE,  # normalized travel distance
+            self.current_energy / ANT_LIFE,  # normalized health
+            self.carried_food / ANT_CARRY_CAPACITY,  # normalize food carry
+            int(ant_in_nest),  # 1 if ant is in nest, 0 otherwise
+            int(self.current_food > 0 or (self.carried_food > 0 and ant_in_nest)),  # reward sensor
+            int(int(self.wall_collision)),  # penalty sensor
+            nest_distance / (self.arena_radius * 2),
+            # normalize to arena diameter, the maximum distance between ant and nest
+            nest_angle / (2 * math.pi),  # normalized angle to nest
         ]
 
         # result.extend(self.pheromone_sensors.flatten())
@@ -757,9 +760,9 @@ class Ant():
         # add scaled nearest wall distances per vision segment
         result.extend([self.wall_distances[i] for i in range(len(self.wall_distances))])
         # add nearest food distances per vision segment
-        result.extend([self.nearest_food_distances[i]  for i in range(len(self.nearest_food_distances))])
+        result.extend([self.nearest_food_distances[i] for i in range(len(self.nearest_food_distances))])
         # add normalized angle to nearest food per vision segment
-        result.extend([self.nearest_food_angles[i]  for i in range(len(self.nearest_food_angles))])
+        result.extend([self.nearest_food_angles[i] for i in range(len(self.nearest_food_angles))])
 
         # Include the food density for each food detection area
 
@@ -783,8 +786,10 @@ class Ant():
         # self._turn()
         self._move()
 
+
 class Nest:
     """Class for the ant nest"""
+
     def __init__(self, pos, radius=10):
         self.pos = vec2d(*pos)
         self.radius = radius
@@ -801,6 +806,7 @@ class Nest:
     def clear_food_register(self):
         self.food_register = {}
 
+
 def speed_penalty_exponential(speed):
     """
     Exponential speed punishment
@@ -809,6 +815,7 @@ def speed_penalty_exponential(speed):
     """
     return (SPEED_PENALTY_BASE ** int(speed)) - 1
 
+
 def speed_penalty_square(speed):
     """
     Square speed punishment
@@ -816,6 +823,7 @@ def speed_penalty_square(speed):
     :return: how much the reward should diminish
     """
     return ((abs(speed) ** 2) / (AGENT_SPEED ** 2)) / 4
+
 
 def rotation_penalty_square(turn_right, turn_left):
     """
@@ -826,7 +834,6 @@ def rotation_penalty_square(turn_right, turn_left):
     """
     # if turn_right 1 and turn_left -1, max value in abs would be 2
     return (abs(turn_right - turn_left) ** 2) / (2 ** 2)
-
 
 
 class AntColonyEnv(ParallelEnv):
@@ -868,7 +875,7 @@ class AntColonyEnv(ParallelEnv):
         arena_radius = int(min(SCREEN_W, SCREEN_H) / 2.0 - min(SCREEN_W, SCREEN_H) * BOUNDARY_SCALE)
 
         # circular arena
-        self.ant_arena = arena_sizes( vec2d(arena_center[0], arena_center[1]), arena_radius)
+        self.ant_arena = arena_sizes(vec2d(arena_center[0], arena_center[1]), arena_radius)
 
         # Pheromone grid setup
         self.cell_size = ANT_DIM.x  # pheromone is ant size
@@ -911,16 +918,16 @@ class AntColonyEnv(ParallelEnv):
             'theta': Box(0.0, 1., (1,), np.float32),
             "heartbeat": Box(0., 1., (1,), np.float32),
             "travel_distance": Box(0., 1., (1,), np.float32),
-            "current_energy": Box(0., 1., (1, ) , np.float32),
-            "carried_food": Box(0., 1., (1, ) , np.float32),
-            "ant_in_nest": Box(0., 1., (1, ) , np.float32),
+            "current_energy": Box(0., 1., (1,), np.float32),
+            "carried_food": Box(0., 1., (1,), np.float32),
+            "ant_in_nest": Box(0., 1., (1,), np.float32),
             "reward_sensor": Box(0., 1., (1,), np.float32),
             "penalty_sensor": Box(0., 1., (1,), np.float32),
-            "distance_to_nest": Box(0.0, 1., (1, ), np.float32),
+            "distance_to_nest": Box(0.0, 1., (1,), np.float32),
             "angle_to_nest": Box(0.0, 1., (1,), np.float32),
             # 'pheromone_sensors': Box(0.0, 1.0, (len(pheromone_ranges) * len(vision_segments) * PHEROMONE_TYPES,)),
             'vision_segments_wall_distances': Box(0.0, 1.0, (len(vision_segments), np.float32)),
-            'vision_segments_food_distances': Box(0.0, 1.0,(len(vision_segments), np.float32)),
+            'vision_segments_food_distances': Box(0.0, 1.0, (len(vision_segments), np.float32)),
             'vision_segments_food_angles': Box(-1.0, 1., (len(vision_segments),)),
             # 'density_areas': Box(0.0, 1.0,(len(vision_segments) * len(view_ranges),)),
             # used when testing just the closest density sensors
@@ -965,7 +972,8 @@ class AntColonyEnv(ParallelEnv):
         return reward
 
     def get_observations(self, others=None):
-        return {a: self.ants[a].get_obs(others, self.nest, self.pheromone_grid, self.cell_size, self.t, self.food_grid) for a in self.agents}
+        return {a: self.ants[a].get_obs(others, self.nest, self.pheromone_grid, self.cell_size, self.t, self.food_grid)
+                for a in self.agents}
 
     def _destroy(self):
         self.ants = {}
@@ -982,6 +990,7 @@ class AntColonyEnv(ParallelEnv):
         rng = np.random.default_rng()
         max_food_draw_radius = (self.ant_arena.arena_radius * 2) * 0.5 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING) * 2
         min_food_draw_radius = (self.ant_arena.arena_radius * 2) * 0.3
+
         # max_food_draw_radius = self.nest.radius * 8 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING) * 2
 
         def get_rand_food_params():
@@ -991,15 +1000,18 @@ class AntColonyEnv(ParallelEnv):
                 # return int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y), quantity
                 x, y = int(self.nest.pos.x + x), int(self.nest.pos.y + y)
                 if (compute_distance(x, y, self.nest.pos.x, self.nest.pos.y) > min_food_draw_radius and
-                        is_rectangle_in_circle(x, y, quantity * FOOD_SIZE_SCALING / 2, self.ant_arena.arena_center, self.ant_arena.arena_radius)):
+                        is_rectangle_in_circle(x, y, quantity * FOOD_SIZE_SCALING / 2, self.ant_arena.arena_center,
+                                               self.ant_arena.arena_radius)):
                     return x, y, quantity
 
         def place_food_mirroring_nest():
             """Returns food parameters with a food location that mirrors the position of the nest over arena origin."""
-            nest_r, nest_theta = to_polar_coordinates(self.nest.pos, self.ant_arena.arena_center, self.ant_arena.arena_radius)
+            nest_r, nest_theta = to_polar_coordinates(self.nest.pos, self.ant_arena.arena_center,
+                                                      self.ant_arena.arena_radius)
             food_theta = (nest_theta + 1) - 2 if nest_theta + 1 > 1 else nest_theta + 1
             quantity = int(rng.uniform(MAX_FOOD_QUANTITY - 10, MAX_FOOD_QUANTITY))
-            food_x, food_y = from_polar_coordinates((nest_r, food_theta), self.ant_arena.arena_center, self.ant_arena.arena_radius, True)
+            food_x, food_y = from_polar_coordinates((nest_r, food_theta), self.ant_arena.arena_center,
+                                                    self.ant_arena.arena_radius, True)
             return food_x, food_y, quantity
 
         if self.food_sources is None or len(self.food_sources) == 0:
@@ -1052,7 +1064,6 @@ class AntColonyEnv(ParallelEnv):
         # # Optional: Apply arena mask to zero out pheromones outside arena
         # self._apply_arena_mask()
 
-
     def reset(self, seed=None, options=None):
         self._destroy()
 
@@ -1076,8 +1087,9 @@ class AntColonyEnv(ParallelEnv):
         while True:
             x, y = rng.uniform(-max_nest_draw_radius, max_nest_draw_radius, size=2)
             x, y = (int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y))
-            if is_rectangle_in_circle(x, y, int(NEST_RADIUS), self.ant_arena.arena_center, self.ant_arena.arena_radius)\
-                    and compute_distance(x, y, self.ant_arena.arena_center.x, self.ant_arena.arena_center.y) > min_nest_draw_radius:
+            if is_rectangle_in_circle(x, y, int(NEST_RADIUS), self.ant_arena.arena_center, self.ant_arena.arena_radius) \
+                    and compute_distance(x, y, self.ant_arena.arena_center.x,
+                                         self.ant_arena.arena_center.y) > min_nest_draw_radius:
                 self.nest = Nest((x, y), int(NEST_RADIUS))
                 break
 
@@ -1162,7 +1174,8 @@ class AntColonyEnv(ParallelEnv):
         for agent, action in actions.items():
             self.ants[agent].set_action(action[:3])
             self.ants[agent].update()
-            self.ants[agent].place_pheromone(action[3], self.pheromone_grid, self.grid_width, self.grid_height, self.cell_size)
+            self.ants[agent].place_pheromone(action[3], self.pheromone_grid, self.grid_width, self.grid_height,
+                                             self.cell_size)
             self.ants[agent].handle_health(action[1], action[2])
             self.ants[agent].handle_food(self.food_sources, self.nest, agent, SHOULD_FOOD_DECREASE)
         self.t += 1
@@ -1199,7 +1212,7 @@ class AntColonyEnv(ParallelEnv):
     def _draw_text(canvas: pygame.Surface, font: pygame.font, x: int, y: int, text: str, color: tuple[int, int, int]):
         text = font.render(text, True, color)
         text_rect = text.get_rect()
-        text_rect.center = (x,y)
+        text_rect.center = (x, y)
         canvas.blit(text, text_rect)
 
     def render(self, mode=None):
@@ -1518,7 +1531,7 @@ class AntColonyEnv(ParallelEnv):
                     for range in pheromone_ranges:
                         pygame.draw.arc(
                             canvas,
-                            (255, 165, 0),# orange
+                            (255, 165, 0),  # orange
                             (int(ant.pos.x - range), int(ant.pos.y - range), range * 2,
                              range * 2),
                             # To align to pygame where angles increase clockwise, we needed to inverse the values
@@ -1533,7 +1546,7 @@ class AntColonyEnv(ParallelEnv):
             if draw_ant_vision:
                 for segment_idx, distance in ant.nearest_food_distances.items():
                     angle = ant.nearest_food_angles[segment_idx]
-                    angle = angle * (2 * math.pi) # denormalize angle, from (0, 1) interval
+                    angle = angle * (2 * math.pi)  # denormalize angle, from (0, 1) interval
                     if distance is not None and distance < 1.0:
                         # Calculate the central angle of the segment
                         angle_range, segment_color, _ = vision_segments[segment_idx]

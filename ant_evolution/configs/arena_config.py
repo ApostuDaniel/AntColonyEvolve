@@ -80,6 +80,29 @@ MAX_DETECTABLE_PHEROMONE_CONCENTRATION = 2
 view_ranges = [MIN_VISION_RANGE, MIDDLE_VISION_RANGE, MAX_VISION_RANGE]
 pheromone_ranges = [PHEROMONE_DETECTION_MIN_RANGE, PHEROMONE_DETECTION_MAX_RANGE]
 
+"""
+Observation name and whether it should be used or not
+"""
+possible_observations = {
+        "r_norm": False,  # Normalized radial position
+        "theta_norm": False,  # Normalized angular position
+        "speed": True,  # Normalized current speed
+        "theta": True,  # Normalized current orientation
+        "heartbeat": True,  # HEARTBEAT
+        "travel_distance": True,  # normalized travel distance
+        "current_energy": True,  # normalized health
+        "carried_food": True,  # normalize food carry
+        "ant_in_nest": True,  # 1 if ant is in nest, 0 otherwise
+        "reward_sensor": True,  # how much reward is given for current step
+        "penalty_sensor": True,  # how much penalty is incurred for current step
+        "distance_to_nest": True,  # normalized to arena diameter, the maximum distance between ant and nest
+        "angle_to_nest": True,  # normalized angle to nest
+        "pheromones_sensor": False,  # inputs of pheromone detection areas
+        "nearest_wall_distances": True,  # scaled nearest wall distances per vision segment
+        "nearest_food_distances": True,  # nearest food distances per vision segment
+        "nearest_food_angles": True,  # normalized angle to the nearest food per vision segment
+        "food_density": False,  # a food density fraction per vision segment per view range
+    }
 
 def parse_vision_segments(config):
     """
