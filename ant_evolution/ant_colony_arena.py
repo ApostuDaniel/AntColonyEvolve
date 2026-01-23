@@ -493,9 +493,88 @@ class Ant():
 
         return detected_food, density_areas, food_in_eating_range
 
+    # def _detect_pheromones(self, pheromone_grid, cell_size):
+    #     """Detect pheromones in each vision segment"""
+    #     # Initialize sensor array: 2 ranges x 3 segments x 3 pheromone types
+    #     sensors = np.zeros((len(pheromone_ranges), len(vision_segments), PHEROMONE_TYPES))
+    #
+    #     if pheromone_grid is None:
+    #         return sensors
+    #
+    #     # Get grid position
+    #     grid_x = int(self.pos.x / cell_size)
+    #     grid_y = int(self.pos.y / cell_size)
+    #
+    #     # Calculate search range
+    #     max_range = PHEROMONE_DETECTION_MAX_RANGE
+    #     grid_range = int(max_range / cell_size) + 1
+    #
+    #     # Get grid bounds
+    #     min_i = max(0, grid_y - grid_range)
+    #     max_i = min(pheromone_grid.shape[0], grid_y + grid_range + 1)
+    #     min_j = max(0, grid_x - grid_range)
+    #     max_j = min(pheromone_grid.shape[1], grid_x + grid_range + 1)
+    #
+    #     # Pre-calculate segment boundaries once
+    #     segment_boundaries = self._get_segment_boundaries()
+    #     ranges_squared = [r ** 2 for r in pheromone_ranges]
+    #     max_range_squared = max(ranges_squared)
+    #     dim_squared = ANT_DIM.x ** 2
+    #     for i in range(min_i, max_i):
+    #         for j in range(min_j, max_j):
+    #             # Calculate world position of cell center
+    #             cell_x = (j + 0.5) * cell_size
+    #             cell_y = (i + 0.5) * cell_size
+    #
+    #             if not np.sum(pheromone_grid[i, j]) >= 0.1:
+    #                 continue
+    #
+    #             # Calculate vector from ant to cell
+    #             dx = cell_x - self.pos.x
+    #             dy = cell_y - self.pos.y
+    #             # distance = math.sqrt(dx ** 2 + dy ** 2)
+    #             distance_squared = dx ** 2 + dy ** 2
+    #
+    #             # Skip if beyond vision range
+    #             # skip if directly under ant
+    #             if distance_squared > max_range_squared or distance_squared < dim_squared:
+    #                 continue
+    #
+    #             # angle relative to ant
+    #             angle = math.atan2(dy, dx) % (2 * math.pi)
+    #
+    #             # angle relative to ant's heading
+    #             relative_angle = (angle - self.theta + math.pi) % (2 * math.pi) - math.pi
+    #
+    #             # Early skip if outside vision cone
+    #             if not (vision_segments[0][0][0] <= relative_angle <= vision_segments[-1][0][-1]):
+    #                 continue
+    #
+    #             # Determine which range bin the cell belongs to
+    #             range_idx = None
+    #             for idx, r in enumerate(ranges_squared):
+    #                 if distance_squared <= r:
+    #                     range_idx = idx
+    #                     break
+    #
+    #             # Skip if not in any range bin
+    #             if range_idx is None:
+    #                 continue
+    #
+    #             for start_angle, stop_angle, segment_idx in segment_boundaries:
+    #                 if start_angle < stop_angle:
+    #                     if start_angle <= angle <= stop_angle:
+    #                         sensors[range_idx, segment_idx] += pheromone_grid[i, j]
+    #                         break
+    #                 elif angle >= start_angle or angle <= stop_angle:
+    #                     # Angle wraps around 2π boundary
+    #                     sensors[range_idx, segment_idx] += pheromone_grid[i, j]
+    #                     break
+    #
+    #     return sensors
+
     def _detect_pheromones(self, pheromone_grid, cell_size):
-        """Detect pheromones in each vision segment"""
-        # Initialize sensor array: 2 ranges x 3 segments x 3 pheromone types
+        """Detect pheromones in each vision segment - vectorized version"""
         sensors = np.zeros((len(pheromone_ranges), len(vision_segments), PHEROMONE_TYPES))
 
         if pheromone_grid is None:
@@ -515,63 +594,89 @@ class Ant():
         min_j = max(0, grid_x - grid_range)
         max_j = min(pheromone_grid.shape[1], grid_x + grid_range + 1)
 
-        # Pre-calculate segment boundaries once
-        segment_boundaries = self._get_segment_boundaries()
-        ranges_squared = [r ** 2 for r in pheromone_ranges]
-        max_range_squared = max(ranges_squared)
+        # Extract the relevant subgrid
+        subgrid = pheromone_grid[min_i:max_i, min_j:max_j]
+
+        # Early exit if no detectable pheromones
+        if not np.any(np.sum(subgrid, axis=-1) >= MIN_DETECTABLE_PHEROMONE_CONCENTRATION):
+            return sensors
+
+        # Create coordinate grids for the subgrid
+        i_indices, j_indices = np.mgrid[min_i:max_i, min_j:max_j]
+
+        # Calculate world positions of all cells at once
+        cell_x = (j_indices + 0.5) * cell_size
+        cell_y = (i_indices + 0.5) * cell_size
+
+        # Calculate vectors from ant to all cells
+        dx = cell_x - self.pos.x
+        dy = cell_y - self.pos.y
+        distance_squared = dx ** 2 + dy ** 2
+
+        # Create mask for valid cells
+        max_range_squared = PHEROMONE_DETECTION_MAX_RANGE ** 2
         dim_squared = ANT_DIM.x ** 2
-        for i in range(min_i, max_i):
-            for j in range(min_j, max_j):
-                # Calculate world position of cell center
-                cell_x = (j + 0.5) * cell_size
-                cell_y = (i + 0.5) * cell_size
+        mask = (distance_squared <= max_range_squared) & (distance_squared >= dim_squared)
+        mask &= (np.sum(subgrid, axis=-1) >= MIN_DETECTABLE_PHEROMONE_CONCENTRATION)  # Has detectable pheromones
 
-                if not np.sum(pheromone_grid[i, j]) >= 0.1:
-                    continue
+        # Early exit if no valid cells
+        if not np.any(mask):
+            return sensors
 
-                # Calculate vector from ant to cell
-                dx = cell_x - self.pos.x
-                dy = cell_y - self.pos.y
-                # distance = math.sqrt(dx ** 2 + dy ** 2)
-                distance_squared = dx ** 2 + dy ** 2
+        # Calculate angles for all cells
+        angles = np.arctan2(dy, dx) % (2 * np.pi)
+        relative_angles = (angles - self.theta + np.pi) % (2 * np.pi) - np.pi
 
-                # Skip if beyond vision range
-                # skip if directly under ant
-                if distance_squared > max_range_squared or distance_squared < dim_squared:
-                    continue
+        # Vision cone mask
+        vision_mask = (relative_angles >= vision_segments[0][0][0]) & \
+                      (relative_angles <= vision_segments[-1][0][-1])
+        mask &= vision_mask
 
-                # angle relative to ant
-                angle = math.atan2(dy, dx) % (2 * math.pi)
+        # Get valid indices
+        valid_indices = np.where(mask)
+        if len(valid_indices[0]) == 0:
+            return sensors
 
-                # angle relative to ant's heading
-                relative_angle = (angle - self.theta + math.pi) % (2 * math.pi) - math.pi
+        # Extract valid data
+        valid_distances_sq = distance_squared[valid_indices]
+        valid_angles = angles[valid_indices]
+        valid_pheromones = subgrid[valid_indices]
 
-                # Early skip if outside vision cone
-                if not (vision_segments[0][0][0] <= relative_angle <= vision_segments[-1][0][-1]):
-                    continue
+        # Determine range bins (vectorized)
+        ranges_squared = np.array([r ** 2 for r in pheromone_ranges])
+        range_indices = np.searchsorted(ranges_squared, valid_distances_sq)
 
-                # Determine which range bin the cell belongs to
-                range_idx = None
-                for idx, r in enumerate(ranges_squared):
-                    if distance_squared <= r:
-                        range_idx = idx
-                        break
+        # Filter out cells beyond all ranges
+        in_range = range_indices < len(ranges_squared)
+        range_indices = range_indices[in_range]
+        valid_angles = valid_angles[in_range]
+        valid_pheromones = valid_pheromones[in_range]
 
-                # Skip if not in any range bin
-                if range_idx is None:
-                    continue
+        # Determine segment bins
+        segment_boundaries = self._get_segment_boundaries()
+        segment_indices = self._assign_segments_vectorized(valid_angles, segment_boundaries)
 
-                for start_angle, stop_angle, segment_idx in segment_boundaries:
-                    if start_angle < stop_angle:
-                        if start_angle <= angle <= stop_angle:
-                            sensors[range_idx, segment_idx] += pheromone_grid[i, j]
-                            break
-                    elif angle >= start_angle or angle <= stop_angle:
-                        # Angle wraps around 2π boundary
-                        sensors[range_idx, segment_idx] += pheromone_grid[i, j]
-                        break
+        # Accumulate pheromones into sensors
+        for idx in range(len(range_indices)):
+            r_idx = range_indices[idx]
+            s_idx = segment_indices[idx]
+            if s_idx >= 0:  # Valid segment
+                sensors[r_idx, s_idx] += valid_pheromones[idx]
 
         return sensors
+
+    def _assign_segments_vectorized(self, angles, segment_boundaries):
+        """Vectorized segment assignment"""
+        segment_indices = np.full(len(angles), -1, dtype=int)
+
+        for start_angle, stop_angle, segment_idx in segment_boundaries:
+            if start_angle < stop_angle:
+                mask = (angles >= start_angle) & (angles <= stop_angle)
+            else:  # Wraps around
+                mask = (angles >= start_angle) | (angles <= stop_angle)
+            segment_indices[mask] = segment_idx
+
+        return segment_indices
 
     def get_polar_position(self):
         """
@@ -720,12 +825,12 @@ class Ant():
             self._detect_distances(detected_food)
 
         # Add pheromone sensor values (flattened: 3 segments * 3 types = 9 values)
-        # if pheromone_grid is not None and cell_size is not None:
-        #     self.pheromone_sensors = self._detect_pheromones(pheromone_grid, cell_size)
-        #     # clip value to max detectable
-        #     numpy.clip(self.pheromone_sensors, 0, MAX_DETECTABLE_PHEROMONE_CONCENTRATION)
-        #     #normalize concentrations
-        #     self.pheromone_sensors /= MAX_DETECTABLE_PHEROMONE_CONCENTRATION
+        if pheromone_grid is not None and cell_size is not None:
+            self.pheromone_sensors = self._detect_pheromones(pheromone_grid, cell_size)
+            # clip value to max detectable
+            np.clip(self.pheromone_sensors, 0, MAX_DETECTABLE_PHEROMONE_CONCENTRATION)
+            # normalize concentrations
+            self.pheromone_sensors /= MAX_DETECTABLE_PHEROMONE_CONCENTRATION
 
         if nest is not None:
             (nest_distance, nest_angle, ant_in_nest) = self._detect_nest(nest)
@@ -755,7 +860,7 @@ class Ant():
             nest_angle / (2 * math.pi),  # normalized angle to nest
         ]
 
-        # result.extend(self.pheromone_sensors.flatten())
+        result.extend(self.pheromone_sensors.flatten())
 
         # add scaled nearest wall distances per vision segment
         result.extend([self.wall_distances[i] for i in range(len(self.wall_distances))])
@@ -1314,6 +1419,103 @@ class AntColonyEnv(ParallelEnv):
                             int(self.cell_size / 2)
                         )
 
+        # def draw_ant_grid_vision():
+        #     for agent in self.agents:
+        #         ant = self.ants[agent]
+        #         # Get grid position
+        #         grid_x = int(ant.pos.x / self.cell_size)
+        #         grid_y = int(ant.pos.y / self.cell_size)
+        #
+        #         # Calculate search range
+        #         max_range = PHEROMONE_DETECTION_MAX_RANGE
+        #         grid_range = int(max_range / self.cell_size) + 1
+        #
+        #         # Get grid bounds
+        #         min_i = max(0, grid_y - grid_range)
+        #         max_i = min(self.pheromone_grid.shape[0], grid_y + grid_range + 1)
+        #         min_j = max(0, grid_x - grid_range)
+        #         max_j = min(self.pheromone_grid.shape[1], grid_x + grid_range + 1)
+        #
+        #         # Pre-calculate segment boundaries once
+        #         segment_boundaries = ant._get_segment_boundaries()
+        #
+        #         for i in range(min_i, max_i):
+        #             for j in range(min_j, max_j):
+        #                 # Calculate world position of cell center
+        #                 cell_x = (j + 0.5) * self.cell_size
+        #                 cell_y = (i + 0.5) * self.cell_size
+        #
+        #                 r, g, b = 255, 0, 0
+        #                 if np.sum(self.pheromone_grid[i, j]) >= 0.1:
+        #                     r, g, b = 0, 255, 0
+        #
+        #                 # Calculate vector from ant to cell
+        #                 dx = cell_x - ant.pos.x
+        #                 dy = cell_y - ant.pos.y
+        #                 distance = math.sqrt(dx ** 2 + dy ** 2)
+        #
+        #                 # Skip if beyond vision range
+        #                 # skip if directly under ant
+        #                 if distance > max_range or distance < ANT_DIM.x:
+        #                     continue
+        #
+        #                 # Determine which range bin the cell belongs to
+        #                 range_idx = None
+        #                 for idx, pheromone_range in enumerate(pheromone_ranges):
+        #                     if distance <= pheromone_range:
+        #                         range_idx = idx
+        #                         break
+        #
+        #                 # Skip if not in any range bin
+        #                 if range_idx is None:
+        #                     continue
+        #
+        #                 # diferentiate colours between ranges by blue
+        #                 b = (200 * range_idx) % 256
+        #                 colour = (r, g, b)
+        #
+        #                 angle = math.atan2(dy, dx) % (2 * math.pi)
+        #
+        #                 for start_angle, stop_angle, segment_idx in segment_boundaries:
+        #                     if start_angle < stop_angle:
+        #                         if start_angle <= angle <= stop_angle:
+        #                             pygame.draw.rect(
+        #                                 canvas,
+        #                                 colour,
+        #                                 (
+        #                                     j * self.cell_size,
+        #                                     i * self.cell_size,
+        #                                     ANT_DIM.x,
+        #                                     ANT_DIM.x
+        #                                 )
+        #                             )
+        #                             break
+        #                     elif angle >= start_angle or angle <= stop_angle:
+        #                         # Angle wraps around 2π boundary
+        #                         pygame.draw.rect(
+        #                             canvas,
+        #                             colour,
+        #                             (
+        #                                 j * self.cell_size,
+        #                                 i * self.cell_size,
+        #                                 ANT_DIM.x,
+        #                                 ANT_DIM.x
+        #                             )
+        #                         )
+        #                         break
+        def _assign_segments_vectorized(angles, segment_boundaries):
+            """Vectorized segment assignment"""
+            segment_indices = np.full(len(angles), -1, dtype=int)
+
+            for start_angle, stop_angle, segment_idx in segment_boundaries:
+                if start_angle < stop_angle:
+                    mask = (angles >= start_angle) & (angles <= stop_angle)
+                else:  # Wraps around
+                    mask = (angles >= start_angle) | (angles <= stop_angle)
+                segment_indices[mask] = segment_idx
+
+            return segment_indices
+
         def draw_ant_grid_vision():
             for agent in self.agents:
                 ant = self.ants[agent]
@@ -1331,73 +1533,101 @@ class AntColonyEnv(ParallelEnv):
                 min_j = max(0, grid_x - grid_range)
                 max_j = min(self.pheromone_grid.shape[1], grid_x + grid_range + 1)
 
-                # Pre-calculate segment boundaries once
+                # Extract the relevant subgrid
+                subgrid = self.pheromone_grid[min_i:max_i, min_j:max_j]
+
+                # Early exit if no detectable pheromones
+                if not np.any(np.sum(subgrid, axis=-1) >= MIN_DETECTABLE_PHEROMONE_CONCENTRATION):
+                    continue
+
+                # Create coordinate grids for the subgrid
+                i_indices, j_indices = np.mgrid[min_i:max_i, min_j:max_j]
+
+                # Calculate world positions of all cells at once
+                cell_x = (j_indices + 0.5) * self.cell_size
+                cell_y = (i_indices + 0.5) * self.cell_size
+
+                # Calculate vectors from ant to all cells
+                dx = cell_x - ant.pos.x
+                dy = cell_y - ant.pos.y
+                distance_squared = dx ** 2 + dy ** 2
+                distance = np.sqrt(distance_squared)
+
+                # Create mask for valid cells (within vision range)
+                max_range_squared = max_range ** 2
+                dim_squared = ANT_DIM.x ** 2
+                mask = (distance_squared <= max_range_squared) & (distance_squared >= dim_squared)
+
+                # Early exit if no valid cells
+                if not np.any(mask):
+                    continue
+
+                # Calculate angles for all cells
+                angles = np.arctan2(dy, dx) % (2 * np.pi)
+
+                # Determine range bins (vectorized)
+                ranges_array = np.array(pheromone_ranges)
+                range_indices = np.searchsorted(ranges_array, distance)
+
+                # Filter out cells beyond all ranges
+                in_range_mask = range_indices < len(pheromone_ranges)
+                mask &= in_range_mask
+
+                # Get valid indices
+                valid_i, valid_j = np.where(mask)
+                if len(valid_i) == 0:
+                    continue
+
+                # Extract data for valid cells
+                valid_i += min_i
+                valid_j += min_j
+                valid_angles = angles[mask]
+                valid_ranges = range_indices[mask]
+
+                # Check pheromone presence with MIN_DETECTABLE_PHEROMONE_CONCENTRATION
+                has_pheromones = np.sum(self.pheromone_grid[valid_i, valid_j],
+                                        axis=-1) >= MIN_DETECTABLE_PHEROMONE_CONCENTRATION
+
+                # Determine segment bins
                 segment_boundaries = ant._get_segment_boundaries()
+                segment_indices = _assign_segments_vectorized(valid_angles, segment_boundaries)
 
-                for i in range(min_i, max_i):
-                    for j in range(min_j, max_j):
-                        # Calculate world position of cell center
-                        cell_x = (j + 0.5) * self.cell_size
-                        cell_y = (i + 0.5) * self.cell_size
+                # Filter out cells not in any segment
+                in_segment_mask = segment_indices >= 0
+                valid_i = valid_i[in_segment_mask]
+                valid_j = valid_j[in_segment_mask]
+                valid_ranges = valid_ranges[in_segment_mask]
+                has_pheromones = has_pheromones[in_segment_mask]
 
-                        r, g, b = 255, 0, 0
-                        if np.sum(self.pheromone_grid[i, j]) >= 0.1:
-                            r, g, b = 0, 255, 0
+                # Prepare rectangles and colors for batch drawing
+                rects = []
+                colors = []
 
-                        # Calculate vector from ant to cell
-                        dx = cell_x - ant.pos.x
-                        dy = cell_y - ant.pos.y
-                        distance = math.sqrt(dx ** 2 + dy ** 2)
+                for idx in range(len(valid_i)):
+                    i, j = valid_i[idx], valid_j[idx]
+                    range_idx = valid_ranges[idx]
 
-                        # Skip if beyond vision range
-                        # skip if directly under ant
-                        if distance > max_range or distance < ANT_DIM.x:
-                            continue
+                    # Determine color
+                    if has_pheromones[idx]:
+                        r, g = 0, 255
+                    else:
+                        r, g = 255, 0
 
-                        # Determine which range bin the cell belongs to
-                        range_idx = None
-                        for idx, pheromone_range in enumerate(pheromone_ranges):
-                            if distance <= pheromone_range:
-                                range_idx = idx
-                                break
+                    b = (200 * range_idx) % 256
 
-                        # Skip if not in any range bin
-                        if range_idx is None:
-                            continue
+                    rect = pygame.Rect(
+                        j * self.cell_size,
+                        i * self.cell_size,
+                        ANT_DIM.x,
+                        ANT_DIM.x
+                    )
+                    rects.append(rect)
+                    colors.append((r, g, b))
 
-                        # diferentiate colours between ranges by blue
-                        b = (200 * range_idx) % 256
-                        colour = (r, g, b)
+                # Draw all rectangles at once
+                for rect, color in zip(rects, colors):
+                    pygame.draw.rect(canvas, color, rect)
 
-                        angle = math.atan2(dy, dx) % (2 * math.pi)
-
-                        for start_angle, stop_angle, segment_idx in segment_boundaries:
-                            if start_angle < stop_angle:
-                                if start_angle <= angle <= stop_angle:
-                                    pygame.draw.rect(
-                                        canvas,
-                                        colour,
-                                        (
-                                            j * self.cell_size,
-                                            i * self.cell_size,
-                                            ANT_DIM.x,
-                                            ANT_DIM.x
-                                        )
-                                    )
-                                    break
-                            elif angle >= start_angle or angle <= stop_angle:
-                                # Angle wraps around 2π boundary
-                                pygame.draw.rect(
-                                    canvas,
-                                    colour,
-                                    (
-                                        j * self.cell_size,
-                                        i * self.cell_size,
-                                        ANT_DIM.x,
-                                        ANT_DIM.x
-                                    )
-                                )
-                                break
 
         draw_grid_lines()
         if render_ant_grid_vision:
