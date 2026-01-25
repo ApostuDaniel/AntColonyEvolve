@@ -188,6 +188,20 @@ def from_polar_coordinates(polar_coords, arena_center, arena_radius, norm=True):
     return x, y
 
 
+def _assign_segments_vectorized(angles, segment_boundaries):
+    """Vectorized segment assignment"""
+    segment_indices = np.full(len(angles), -1, dtype=int)
+
+    for start_angle, stop_angle, segment_idx in segment_boundaries:
+        if start_angle < stop_angle:
+            mask = (angles >= start_angle) & (angles <= stop_angle)
+        else:  # Wraps around
+            mask = (angles >= start_angle) | (angles <= stop_angle)
+        segment_indices[mask] = segment_idx
+
+    return segment_indices
+
+
 ##########################################
 #            Helper class for efficient distance detection            #
 ##########################################
@@ -198,28 +212,45 @@ class SpatialGrid:
         self.height = height
         self.nx = int(np.ceil(width / cell_size))
         self.ny = int(np.ceil(height / cell_size))
-        self.grid = [[[] for _ in range(self.ny)] for _ in range(self.nx)]
+        self.grid = {}
 
-    def _get_cell_index(self, x, y):
-        return min(int(x / self.cell_size), self.nx - 1), min(int(y / self.cell_size), self.ny - 1)
+    def _get_cell_key(self, x, y):
+        i = min(int(x / self.cell_size), self.nx - 1)
+        j = min(int(y / self.cell_size), self.ny - 1)
+        return i * self.ny + j  # Flatten to single integer key
 
     def add_item(self, idx, x, y):
-        i, j = self._get_cell_index(x, y)
-        self.grid[i][j].append(idx)
+        key = self._get_cell_key(x, y)
+        if key not in self.grid:
+            self.grid[key] = []
+        self.grid[key].append(idx)
 
     def remove_item(self, idx, x, y):
-        i, j = self._get_cell_index(x, y)
-        self.grid[i][j].remove(idx)
+        key = self._get_cell_key(x, y)
+        if key in self.grid:
+            self.grid[key].remove(idx)
+            if not self.grid[key]:  # Clean up empty cells
+                del self.grid[key]
 
     def query_radius(self, x, y, radius):
-        i_center, j_center = self._get_cell_index(x, y)
+        i_center = min(int(x / self.cell_size), self.nx - 1)
+        j_center = min(int(y / self.cell_size), self.ny - 1)
         cell_radius = int(np.ceil(radius / self.cell_size))
+
+        i_min = max(0, i_center - cell_radius)
+        i_max = min(self.nx, i_center + cell_radius + 1)
+        j_min = max(0, j_center - cell_radius)
+        j_max = min(self.ny, j_center + cell_radius + 1)
 
         # Get neighboring cells
         item_ids = []
-        for i in range(max(0, i_center - cell_radius), min(self.nx, i_center + cell_radius + 1)):
-            for j in range(max(0, j_center - cell_radius), min(self.ny, j_center + cell_radius + 1)):
-                item_ids.extend(self.grid[i][j])
+        for i in range(i_min, i_max):
+            base_key = i * self.ny
+            for j in range(j_min, j_max):
+                key = base_key + j
+                if key in self.grid:
+                    item_ids.extend(self.grid[key])
+
         return item_ids
 
 
@@ -406,6 +437,24 @@ class Ant():
             if distance_squared <= (vision_ranges[i] + food_size) ** 2:
                 return i
         return None
+    def _get_fitting_vision_range_indices_vectorized(self, distance_squared, vision_ranges_squared, food_radii):
+        """Vectorized version of vision range index calculation"""
+        # For each food, find which range it fits in
+        # Broadcast: (n_food, 1) and (1, n_ranges)
+        distance_sq_expanded = distance_squared[:, np.newaxis]
+        food_radii_expanded = food_radii[:, np.newaxis]
+
+        # Check against all ranges
+        range_checks = distance_sq_expanded <= (np.sqrt(vision_ranges_squared) + food_radii_expanded) ** 2
+
+        # Find first True for each food (argmax finds first True in boolean array)
+        indices = np.argmax(range_checks, axis=1)
+
+        # If no range matched, argmax returns 0, so we need to check if actually matched
+        matched = range_checks[np.arange(len(distance_squared)), indices]
+
+        # Return None for unmatched, otherwise the index
+        return np.where(matched, indices, -1)
 
     def _detect_nest(self, nest):
         dx = nest.pos.x - self.pos.x
@@ -453,44 +502,61 @@ class Ant():
                          for segment_idx in range(len(vision_segments))}
         # Store food that can be eaten
         food_in_eating_range = []
+
+        if len(food_ids) == 0:
+            return detected_food, density_areas, food_in_eating_range
+
+
+        food_array = np.array([food_sources[i] for i in food_ids])
+        food_positions = food_array[:, :2]  # x, y
+        food_quantities = food_array[:, 2]  # quantities
+
+        dx = food_positions[:, 0] - pos_x
+        dy = food_positions[:, 1] - pos_y
+        distance_squared = dx ** 2 + dy ** 2
+
+        food_sizes = np.maximum(2, food_quantities * FOOD_SIZE_SCALING).astype(int)
+        food_radii = food_sizes / 2
+
+        eating_range_squared = (ANT_DIM.x + food_radii) ** 2
+        eating_mask = distance_squared <= eating_range_squared
+        food_in_eating_range = [food_ids[i] for i in np.where(eating_mask)[0]]
+
+        vision_ranges_squared = np.array(view_ranges) ** 2
+        fitting_indices = self._get_fitting_vision_range_indices_vectorized(
+            distance_squared, vision_ranges_squared, food_radii
+        )
+
+        # if none of the vision ranges matched, the vision range assigned would be -1, thus means it's out of range
+        vision_mask = fitting_indices != -1
+
+        if not np.any(vision_mask):
+            return detected_food, density_areas, food_in_eating_range
+
+        # Get valid food indices
+        valid_indices = np.where(vision_mask)[0]
+
+        angles = np.arctan2(dy[valid_indices], dx[valid_indices]) % (2 * np.pi)
+        norm_angles = angles / (2 * np.pi)
+
         # Pre-calculate segment boundaries once
         segment_boundaries = self._get_segment_boundaries()
 
-        # Process each food
+        segment_indices = _assign_segments_vectorized(angles, segment_boundaries)
 
-        for i in food_ids:
-            (food_x, food_y, quantity) = food_sources[i]
-            # Use faster distance calculation without sqrt for initial check
-            dx = food_x - pos_x
-            dy = food_y - pos_y
-            distance_squared = dx * dx + dy * dy
-            food_size = int(max(2, quantity * FOOD_SIZE_SCALING))
-            food_radius = food_size / 2
-            eating_range_squared = (ANT_DIM.x + food_radius) ** 2
-            if distance_squared <= eating_range_squared:
-                # Mark food as eaten
-                food_in_eating_range.append(i)
+        # Process each food valid food
+        for idx, valid_idx in enumerate(valid_indices):
+            segment_idx = segment_indices[idx]
+            if segment_idx != -1:  # Valid segment
+                food_x = food_positions[valid_idx, 0]
+                food_y = food_positions[valid_idx, 1]
+                food_radius = food_radii[valid_idx]
+                quantity = food_quantities[valid_idx]
+                range_idx = fitting_indices[valid_idx]
 
-            fitting_view_range_idx = self._get_fitting_vision_range_index(distance_squared, view_ranges, food_radius)
-
-            if distance_squared <= (self.vision_range + food_radius) ** 2:
-                # Only calculate angle for ants within range
-                angle_to_food = math.atan2(dy, dx) % (2 * math.pi)
-                # normalized angle
-                norm_angle_to_food = angle_to_food / (2 * math.pi)
-
-                # Find matching segment
-                for start_angle, stop_angle, segment_idx in segment_boundaries:
-                    if start_angle < stop_angle:
-                        if start_angle <= angle_to_food <= stop_angle:
-                            detected_food[segment_idx].append((food_x, food_y, norm_angle_to_food, food_radius))
-                            density_areas[segment_idx][fitting_view_range_idx]['food'] += quantity
-                            break
-                    elif angle_to_food >= start_angle or angle_to_food <= stop_angle:
-                        # Angle wraps around 2π boundary
-                        detected_food[segment_idx].append((food_x, food_y, norm_angle_to_food, food_radius))
-                        density_areas[segment_idx][fitting_view_range_idx]['food'] += quantity
-                        break
+                detected_food[segment_idx].append((food_x, food_y, norm_angles[idx], food_radius))
+                if range_idx is not None:
+                    density_areas[segment_idx][range_idx]['food'] += quantity
 
         return detected_food, density_areas, food_in_eating_range
 
@@ -580,7 +646,7 @@ class Ant():
 
         # Determine segment bins
         segment_boundaries = self._get_segment_boundaries()
-        segment_indices = self._assign_segments_vectorized(valid_angles, segment_boundaries)
+        segment_indices = _assign_segments_vectorized(valid_angles, segment_boundaries)
 
         # Accumulate pheromones into sensors
         for idx in range(len(range_indices)):
@@ -590,19 +656,6 @@ class Ant():
                 sensors[r_idx, s_idx] += valid_pheromones[idx]
 
         return sensors
-
-    def _assign_segments_vectorized(self, angles, segment_boundaries):
-        """Vectorized segment assignment"""
-        segment_indices = np.full(len(angles), -1, dtype=int)
-
-        for start_angle, stop_angle, segment_idx in segment_boundaries:
-            if start_angle < stop_angle:
-                mask = (angles >= start_angle) & (angles <= stop_angle)
-            else:  # Wraps around
-                mask = (angles >= start_angle) | (angles <= stop_angle)
-            segment_indices[mask] = segment_idx
-
-        return segment_indices
 
     def get_polar_position(self):
         """
@@ -1378,19 +1431,6 @@ class AntColonyEnv(ParallelEnv):
             # Blit to main canvas
             canvas.blit(pheromone_surface, (0, 0))
 
-        def _assign_segments_vectorized(angles, segment_boundaries):
-            """Vectorized segment assignment"""
-            segment_indices = np.full(len(angles), -1, dtype=int)
-
-            for start_angle, stop_angle, segment_idx in segment_boundaries:
-                if start_angle < stop_angle:
-                    mask = (angles >= start_angle) & (angles <= stop_angle)
-                else:  # Wraps around
-                    mask = (angles >= start_angle) | (angles <= stop_angle)
-                segment_indices[mask] = segment_idx
-
-            return segment_indices
-
         def draw_ant_grid_vision():
             for agent in self.agents:
                 ant = self.ants[agent]
@@ -1512,7 +1552,8 @@ class AntColonyEnv(ParallelEnv):
     def draw_food_grid(self, canvas: pygame.Surface):
         for agent in self.agents:
             ant = self.ants[agent]
-            grid_i, grid_j = self.food_grid._get_cell_index(ant.pos.x, ant.pos.y)
+            grid_i = min(int(ant.pos.x / self.food_cell_size), self.food_grid.nx - 1)
+            grid_j = min(int(ant.pos.y / self.food_cell_size), self.food_grid.ny - 1)
 
             cell_size = self.food_cell_size
             pygame.draw.rect(
@@ -1521,16 +1562,29 @@ class AntColonyEnv(ParallelEnv):
                 (grid_i * cell_size, grid_j * cell_size, cell_size, cell_size)
             )
 
-            i_center, j_center = self.food_grid._get_cell_index(ant.pos.x, ant.pos.y)
             cell_radius = int(np.ceil(MAX_VISION_RANGE / cell_size))
 
-            for i in range(max(0, i_center - cell_radius), min(self.food_grid.nx, i_center + cell_radius + 1)):
-                for j in range(max(0, j_center - cell_radius), min(self.food_grid.ny, j_center + cell_radius + 1)):
+            # Draw all cells in vision range
+            for i in range(max(0, grid_i - cell_radius), min(self.food_grid.nx, grid_i + cell_radius + 1)):
+                for j in range(max(0, grid_j - cell_radius), min(self.food_grid.ny, grid_j + cell_radius + 1)):
+                    # Check if this cell has food items (exists in the dict)
+                    cell_key = i * self.food_grid.ny + j
+
+                    # Color based on whether cell has items
+                    if cell_key in self.food_grid.grid and len(self.food_grid.grid[cell_key]) > 0:
+                        # Cell has food - draw filled
+                        color = (255, 128, 0)  # Orange for cells with food
+                        width = 0  # Filled
+                    else:
+                        # Empty cell - draw outline only
+                        color = (0, 0, 255)  # Blue outline
+                        width = 3
+
                     pygame.draw.rect(
                         canvas,
-                        (0, 0, 255),
+                        color,
                         (i * cell_size, j * cell_size, cell_size, cell_size),
-                        3
+                        width
                     )
 
     def draw_nest(self, canvas: pygame.Surface, font: pygame.font):
