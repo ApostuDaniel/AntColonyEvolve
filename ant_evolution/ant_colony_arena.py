@@ -1195,10 +1195,11 @@ class AntColonyEnv(ParallelEnv):
         # don't respawn food for pheromone training
         self._respawn_food(SHOULD_FOOD_RESPAWN)
         for agent, action in actions.items():
+            self.ants[agent].place_pheromone(action[3], self.pheromone_grid, self.grid_width, self.grid_height, self.cell_size)
+
             self.ants[agent].set_action(action[:3])
             self.ants[agent].update()
-            self.ants[agent].place_pheromone(action[3], self.pheromone_grid, self.grid_width, self.grid_height,
-                                             self.cell_size)
+
             self.ants[agent].handle_health(action[1], action[2])
             self.ants[agent].handle_food(self.food_sources, self.nest, agent, SHOULD_FOOD_DECREASE)
         self.t += 1
