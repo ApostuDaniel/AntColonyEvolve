@@ -916,12 +916,15 @@ class AntColonyEnv(ParallelEnv):
         self.food_cell_size = MAX_VISION_RANGE + (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING / 2)
 
         # Arena mask to stop pheromones diffusing outside of arena
-        # self.arena_mask = np.zeros((self.grid_height, self.grid_width), dtype=np.float32)
-        # center_x = int(SCREEN_W / 2)
-        # center_y = int(SCREEN_H / 2)
-        # y, x = np.ogrid[-center_y:self.grid_height - center_y, -center_x:self.grid_width - center_x]
-        # mask_radius = (min(self.grid_height, self.grid_width) / 2) * 0.98  # Slightly smaller than arena
-        # self.arena_mask = x * x + y * y <= mask_radius * mask_radius
+        self.arena_mask = np.zeros((self.grid_height, self.grid_width), dtype=np.float32)
+        center_grid_x = arena_center[0] / self.cell_size
+        center_grid_y = arena_center[0] / self.cell_size
+        mask_radius_grid = arena_radius / self.cell_size
+
+        y, x = np.ogrid[:self.grid_height, :self.grid_width]
+        distances_squared = (x - center_grid_x) ** 2 + (y - center_grid_y) ** 2
+
+        self.arena_mask = distances_squared <= (mask_radius_grid * 0.99) ** 2  # Slightly smaller than arena
 
         # Diffusion kernel
         self.diffusion_kernel = self._create_diffuse_decay_kernel(PHEROMONE_DECAY, PHEROMONE_DIFFUSION)
@@ -1073,8 +1076,7 @@ class AntColonyEnv(ParallelEnv):
         """Zero out pheromones outside the circular arena"""
 
         # Apply mask to all pheromone channels
-        for i in range(PHEROMONE_TYPES):
-            self.pheromone_grid[:, :, i] *= self.arena_mask
+        self.pheromone_grid *= self.arena_mask[:, :, np.newaxis]
 
     def _diffuse_decay_pheromones(self):
         """Apply diffusion to pheromone grid using convolution"""
@@ -1089,8 +1091,8 @@ class AntColonyEnv(ParallelEnv):
             cval=0.0
         )
 
-        # # Optional: Apply arena mask to zero out pheromones outside arena
-        # self._apply_arena_mask()
+        # Apply arena mask to zero out pheromones outside arena
+        self._apply_arena_mask()
 
     def reset(self, seed=None, options=None):
         self._destroy()
@@ -1306,55 +1308,6 @@ class AntColonyEnv(ParallelEnv):
                     1
                 )
 
-        # def draw_pheromones():
-        #     # Draw pheromone concentrations only within bounding square
-        #     pheromone_surface = pygame.Surface(
-        #         (canvas.get_width(), canvas.get_height()),
-        #         pygame.SRCALPHA
-        #     )
-        #
-        #     for i in range(grid_top, grid_bottom):
-        #         for j in range(grid_left, grid_right):
-        #             pheromones = self.pheromone_grid[i, j]
-        #
-        #             max_concentration = np.max(pheromones)
-        #
-        #             if max_concentration < MIN_DETECTABLE_PHEROMONE_CONCENTRATION:  # Only draw significant concentrations
-        #                 continue
-        #
-        #             x = int((j + 0.5) * self.cell_size)
-        #             y = int((i + 0.5) * self.cell_size)
-        #
-        #             # Skip if outside arena circle
-        #             dx = x - arena_center_x
-        #             dy = y - arena_center_y
-        #             distance = math.sqrt(dx ** 2 + dy ** 2)
-        #
-        #             if distance > arena_radius:
-        #                 continue
-        #
-        #             strongest_pheromone = np.argmax(pheromones)
-        #             pheromone_color = PHEROMONE_COLORS[strongest_pheromone]
-        #
-        #             normalized_concentration = np.clip(
-        #                 (max_concentration - MIN_DETECTABLE_PHEROMONE_CONCENTRATION) /
-        #                 (MAX_DETECTABLE_PHEROMONE_CONCENTRATION - MIN_DETECTABLE_PHEROMONE_CONCENTRATION),
-        #                 0, 1
-        #             )
-        #
-        #             gamma = 3.0  # Adjust between 1.5-3.0 for different looks
-        #             alpha = int((normalized_concentration ** (1 / gamma)) * 255)
-        #
-        #             # Draw concentration circle
-        #             pygame.draw.circle(
-        #                 pheromone_surface,
-        #                 (*pheromone_color, alpha),
-        #                 (x, y),
-        #                 int(self.cell_size / 2)
-        #             )
-        #
-        #     canvas.blit(pheromone_surface, (0, 0))
-
         def draw_pheromones():
             """Vectorized pheromone drawing - much faster for large grids"""
             # Create surface with per-pixel alpha
@@ -1387,22 +1340,6 @@ class AntColonyEnv(ParallelEnv):
             # Calculate world positions
             x_positions = ((j_abs + 0.5) * self.cell_size).astype(int)
             y_positions = ((i_abs + 0.5) * self.cell_size).astype(int)
-
-            # Filter by arena circle
-            dx = x_positions - arena_center_x
-            dy = y_positions - arena_center_y
-            distances_squared = dx ** 2 + dy ** 2
-            arena_mask = distances_squared <= (arena_radius ** 2)
-
-            # Apply arena mask
-            if not np.any(arena_mask):
-                canvas.blit(pheromone_surface, (0, 0))
-                return
-
-            i_indices = i_indices[arena_mask]
-            j_indices = j_indices[arena_mask]
-            x_positions = x_positions[arena_mask]
-            y_positions = y_positions[arena_mask]
 
             # Get pheromone values for valid cells
             valid_pheromones = subgrid[i_indices, j_indices]
