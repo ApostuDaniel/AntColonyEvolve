@@ -1315,9 +1315,10 @@ class AntColonyEnv(ParallelEnv):
             for i in range(grid_top, grid_bottom):
                 for j in range(grid_left, grid_right):
                     pheromones = self.pheromone_grid[i, j]
-                    total_pheromone = np.sum(pheromones)
 
-                    if total_pheromone < MIN_DETECTABLE_PHEROMONE_CONCENTRATION:  # Only draw significant concentrations
+                    max_concentration = np.max(pheromones)
+
+                    if max_concentration < MIN_DETECTABLE_PHEROMONE_CONCENTRATION:  # Only draw significant concentrations
                         continue
 
                     x = int((j + 0.5) * self.cell_size)
@@ -1331,28 +1332,22 @@ class AntColonyEnv(ParallelEnv):
                     if distance > arena_radius:
                         continue
 
-                    # Normalize each pheromone type to 0-1 range
-                    normalized = np.clip(
-                        (pheromones - MIN_DETECTABLE_PHEROMONE_CONCENTRATION) /
+                    strongest_pheromone = np.argmax(pheromones)
+                    pheromone_color = PHEROMONE_COLORS[strongest_pheromone]
+
+                    normalized_concentration = np.clip(
+                        (max_concentration - MIN_DETECTABLE_PHEROMONE_CONCENTRATION) /
                         (MAX_DETECTABLE_PHEROMONE_CONCENTRATION - MIN_DETECTABLE_PHEROMONE_CONCENTRATION),
                         0, 1
                     )
 
-                    total_normalized = np.clip(
-                        (total_pheromone - MIN_DETECTABLE_PHEROMONE_CONCENTRATION) /
-                        (MAX_DETECTABLE_PHEROMONE_CONCENTRATION - MIN_DETECTABLE_PHEROMONE_CONCENTRATION),
-                        0, 1
-                    )
-
-                    # Create blended color based on pheromone types
                     gamma = 3.0  # Adjust between 1.5-3.0 for different looks
-                    rgb = (normalized ** (1 / gamma) * 255).astype(int)
-                    alpha = int((total_normalized ** (1 / gamma)) * 255)
+                    alpha = int((normalized_concentration ** (1 / gamma)) * 255)
 
                     # Draw concentration circle
                     pygame.draw.circle(
                         pheromone_surface,
-                        (rgb[0], rgb[1], rgb[2], alpha),
+                        (*pheromone_color, alpha),
                         (x, y),
                         int(self.cell_size / 2)
                     )
