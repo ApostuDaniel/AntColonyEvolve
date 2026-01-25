@@ -23,7 +23,7 @@ TURN_RATE = 2 * 0.3575  # Maximum turning rate observed in data (radians)
 MAX_TRAVEL_PER_EPISODE = AGENT_SPEED * TIME_LIMIT
 
 NEST_RADIUS = SCREEN_W / 20
-DRAW_NEST_SENSORS = False
+DRAW_NEST_SENSORS = True
 
 SPEED_PENALTY_BASE = 1.5 ** (1 / AGENT_SPEED)
 

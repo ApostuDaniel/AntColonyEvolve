@@ -1217,7 +1217,6 @@ class AntColonyEnv(ParallelEnv):
         # Determine if the episode is done
         self.truncations = {a: self.t >= self.t_limit for a in self.agents}
 
-        # Get observations of other ants in the arena
         if self.food_sources is not None:
             observations = self.get_observations(self.food_sources)
         else:
@@ -1671,12 +1670,14 @@ class AntColonyEnv(ParallelEnv):
 
             if DRAW_NEST_SENSORS:
                 # Draw distance indicator to nest
-                distance, angle_to_nest, _ = ant._detect_nest(self.nest)
+                distance, angle_to_nest, ant_in_nest = ant._detect_nest(self.nest)
                 nest_x = int(ant.pos.x + math.cos(angle_to_nest) * distance)
                 nest_y = int(ant.pos.y + math.sin(angle_to_nest) * distance)
+                # Check also ant_in_nest var: black line to nest if ant outside of nest, green otherwise
+                indicator_color = (0, 0, 0) if not ant_in_nest else (0, 255, 0)
                 pygame.draw.line(
                     canvas,
-                    (0, 0, 0),  # black color for nearest ant distance
+                    indicator_color,
                     (int(ant.pos.x), int(ant.pos.y)),
                     (nest_x, nest_y),
                     1
