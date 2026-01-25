@@ -519,7 +519,7 @@ class Ant():
         subgrid = pheromone_grid[min_i:max_i, min_j:max_j]
 
         # Early exit if no detectable pheromones
-        if not np.any(np.sum(subgrid, axis=-1) >= MIN_DETECTABLE_PHEROMONE_CONCENTRATION):
+        if not np.any(subgrid >= MIN_DETECTABLE_PHEROMONE_CONCENTRATION):
             return sensors
 
         # Create coordinate grids for the subgrid
@@ -538,7 +538,7 @@ class Ant():
         max_range_squared = PHEROMONE_DETECTION_MAX_RANGE ** 2
         dim_squared = ANT_DIM.x ** 2
         mask = (distance_squared <= max_range_squared) & (distance_squared >= dim_squared)
-        mask &= (np.sum(subgrid, axis=-1) >= MIN_DETECTABLE_PHEROMONE_CONCENTRATION)  # Has detectable pheromones
+        mask &= np.any(subgrid >= MIN_DETECTABLE_PHEROMONE_CONCENTRATION, axis=-1)  # Has detectable pheromones
 
         # Early exit if no valid cells
         if not np.any(mask):
@@ -572,6 +572,11 @@ class Ant():
         range_indices = range_indices[in_range]
         valid_angles = valid_angles[in_range]
         valid_pheromones = valid_pheromones[in_range]
+
+        # detectable concentration won't go over MAX_DETECTABLE_PHEROMONE_CONCENTRATION, but
+        # will be 0 if under MIN_DETECTABLE_PHEROMONE_CONCENTRATION
+        valid_pheromones[valid_pheromones < MIN_DETECTABLE_PHEROMONE_CONCENTRATION] = 0
+        valid_pheromones = np.clip(valid_pheromones, 0, MAX_DETECTABLE_PHEROMONE_CONCENTRATION)
 
         # Determine segment bins
         segment_boundaries = self._get_segment_boundaries()
@@ -693,18 +698,18 @@ class Ant():
             # Determine deposit type based on action value
             if pheromone_action < -0.5:
                 # Type 1 (red)
-                pheromone_grid[grid_y, grid_x, 0] = PHEROMONE_DEPOSIT
+                pheromone_grid[grid_y, grid_x, 0] = min(pheromone_grid[grid_y, grid_x, 0] + PHEROMONE_DEPOSIT, MAX_DETECTABLE_PHEROMONE_CONCENTRATION)
                 self.pheromone_deposit_type = 0
             elif pheromone_action < 0:
                 # Type 2 (green)
-                pheromone_grid[grid_y, grid_x, 1] = PHEROMONE_DEPOSIT
+                pheromone_grid[grid_y, grid_x, 1] = min(pheromone_grid[grid_y, grid_x, 1] + PHEROMONE_DEPOSIT, MAX_DETECTABLE_PHEROMONE_CONCENTRATION)
                 self.pheromone_deposit_type = 1
             elif pheromone_action < 0.5:
                 # No deposit
                 self.pheromone_deposit_type = None
             else:
                 # Type 3 (blue)
-                pheromone_grid[grid_y, grid_x, 2] = PHEROMONE_DEPOSIT
+                pheromone_grid[grid_y, grid_x, 2] = min(pheromone_grid[grid_y, grid_x, 2] + PHEROMONE_DEPOSIT, MAX_DETECTABLE_PHEROMONE_CONCENTRATION)
                 self.pheromone_deposit_type = 2
 
     def set_action(self, action):
@@ -1408,7 +1413,7 @@ class AntColonyEnv(ParallelEnv):
                 subgrid = self.pheromone_grid[min_i:max_i, min_j:max_j]
 
                 # Early exit if no detectable pheromones
-                if not np.any(np.sum(subgrid, axis=-1) >= MIN_DETECTABLE_PHEROMONE_CONCENTRATION):
+                if not np.any(subgrid >= MIN_DETECTABLE_PHEROMONE_CONCENTRATION):
                     continue
 
                 # Create coordinate grids for the subgrid
@@ -1456,8 +1461,7 @@ class AntColonyEnv(ParallelEnv):
                 valid_ranges = range_indices[mask]
 
                 # Check pheromone presence with MIN_DETECTABLE_PHEROMONE_CONCENTRATION
-                has_pheromones = np.sum(self.pheromone_grid[valid_i, valid_j],
-                                        axis=-1) >= MIN_DETECTABLE_PHEROMONE_CONCENTRATION
+                has_pheromones = np.any(self.pheromone_grid[valid_i, valid_j] >= MIN_DETECTABLE_PHEROMONE_CONCENTRATION, axis=-1)
 
                 # Determine segment bins
                 segment_boundaries = ant._get_segment_boundaries()
