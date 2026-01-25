@@ -924,7 +924,7 @@ class AntColonyEnv(ParallelEnv):
         # self.arena_mask = x * x + y * y <= mask_radius * mask_radius
 
         # Diffusion kernel
-        self.diffusion_kernel = self._create_diffuse_decay_kernel(PHEROMONE_DECAY, PHEROMONE_RETENTION)
+        self.diffusion_kernel = self._create_diffuse_decay_kernel(PHEROMONE_DECAY, PHEROMONE_DIFFUSION)
 
     def _create_diffuse_decay_kernel(self, decay_rate, diffusion_rate):
         # pheromone diffusion to the corners will be smaller
