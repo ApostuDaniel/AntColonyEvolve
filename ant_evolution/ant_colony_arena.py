@@ -1306,55 +1306,136 @@ class AntColonyEnv(ParallelEnv):
                     1
                 )
 
+        # def draw_pheromones():
+        #     # Draw pheromone concentrations only within bounding square
+        #     pheromone_surface = pygame.Surface(
+        #         (canvas.get_width(), canvas.get_height()),
+        #         pygame.SRCALPHA
+        #     )
+        #
+        #     for i in range(grid_top, grid_bottom):
+        #         for j in range(grid_left, grid_right):
+        #             pheromones = self.pheromone_grid[i, j]
+        #
+        #             max_concentration = np.max(pheromones)
+        #
+        #             if max_concentration < MIN_DETECTABLE_PHEROMONE_CONCENTRATION:  # Only draw significant concentrations
+        #                 continue
+        #
+        #             x = int((j + 0.5) * self.cell_size)
+        #             y = int((i + 0.5) * self.cell_size)
+        #
+        #             # Skip if outside arena circle
+        #             dx = x - arena_center_x
+        #             dy = y - arena_center_y
+        #             distance = math.sqrt(dx ** 2 + dy ** 2)
+        #
+        #             if distance > arena_radius:
+        #                 continue
+        #
+        #             strongest_pheromone = np.argmax(pheromones)
+        #             pheromone_color = PHEROMONE_COLORS[strongest_pheromone]
+        #
+        #             normalized_concentration = np.clip(
+        #                 (max_concentration - MIN_DETECTABLE_PHEROMONE_CONCENTRATION) /
+        #                 (MAX_DETECTABLE_PHEROMONE_CONCENTRATION - MIN_DETECTABLE_PHEROMONE_CONCENTRATION),
+        #                 0, 1
+        #             )
+        #
+        #             gamma = 3.0  # Adjust between 1.5-3.0 for different looks
+        #             alpha = int((normalized_concentration ** (1 / gamma)) * 255)
+        #
+        #             # Draw concentration circle
+        #             pygame.draw.circle(
+        #                 pheromone_surface,
+        #                 (*pheromone_color, alpha),
+        #                 (x, y),
+        #                 int(self.cell_size / 2)
+        #             )
+        #
+        #     canvas.blit(pheromone_surface, (0, 0))
+
         def draw_pheromones():
-            # Draw pheromone concentrations only within bounding square
+            """Vectorized pheromone drawing - much faster for large grids"""
+            # Create surface with per-pixel alpha
             pheromone_surface = pygame.Surface(
                 (canvas.get_width(), canvas.get_height()),
                 pygame.SRCALPHA
             )
 
-            for i in range(grid_top, grid_bottom):
-                for j in range(grid_left, grid_right):
-                    pheromones = self.pheromone_grid[i, j]
+            # Extract subgrid for bounding box
+            subgrid = self.pheromone_grid[grid_top:grid_bottom, grid_left:grid_right]
 
-                    max_concentration = np.max(pheromones)
+            # Find max concentration per cell
+            max_concentrations = np.max(subgrid, axis=-1)
 
-                    if max_concentration < MIN_DETECTABLE_PHEROMONE_CONCENTRATION:  # Only draw significant concentrations
-                        continue
+            # Filter cells with detectable pheromones
+            detectable_mask = max_concentrations >= MIN_DETECTABLE_PHEROMONE_CONCENTRATION
 
-                    x = int((j + 0.5) * self.cell_size)
-                    y = int((i + 0.5) * self.cell_size)
+            # Early exit if no detectable pheromones
+            if not np.any(detectable_mask):
+                canvas.blit(pheromone_surface, (0, 0))
+                return
 
-                    # Skip if outside arena circle
-                    dx = x - arena_center_x
-                    dy = y - arena_center_y
-                    distance = math.sqrt(dx ** 2 + dy ** 2)
+            # Get indices of detectable cells (relative to subgrid)
+            i_indices, j_indices = np.where(detectable_mask)
 
-                    if distance > arena_radius:
-                        continue
+            # Convert to absolute grid coordinates
+            i_abs = i_indices + grid_top
+            j_abs = j_indices + grid_left
 
-                    strongest_pheromone = np.argmax(pheromones)
-                    pheromone_color = PHEROMONE_COLORS[strongest_pheromone]
+            # Calculate world positions
+            x_positions = ((j_abs + 0.5) * self.cell_size).astype(int)
+            y_positions = ((i_abs + 0.5) * self.cell_size).astype(int)
 
-                    normalized_concentration = np.clip(
-                        (max_concentration - MIN_DETECTABLE_PHEROMONE_CONCENTRATION) /
-                        (MAX_DETECTABLE_PHEROMONE_CONCENTRATION - MIN_DETECTABLE_PHEROMONE_CONCENTRATION),
-                        0, 1
-                    )
+            # Filter by arena circle
+            dx = x_positions - arena_center_x
+            dy = y_positions - arena_center_y
+            distances_squared = dx ** 2 + dy ** 2
+            arena_mask = distances_squared <= (arena_radius ** 2)
 
-                    gamma = 3.0  # Adjust between 1.5-3.0 for different looks
-                    alpha = int((normalized_concentration ** (1 / gamma)) * 255)
+            # Apply arena mask
+            if not np.any(arena_mask):
+                canvas.blit(pheromone_surface, (0, 0))
+                return
 
-                    # Draw concentration circle
-                    pygame.draw.circle(
-                        pheromone_surface,
-                        (*pheromone_color, alpha),
-                        (x, y),
-                        int(self.cell_size / 2)
-                    )
+            i_indices = i_indices[arena_mask]
+            j_indices = j_indices[arena_mask]
+            x_positions = x_positions[arena_mask]
+            y_positions = y_positions[arena_mask]
 
+            # Get pheromone values for valid cells
+            valid_pheromones = subgrid[i_indices, j_indices]
+
+            # Find dominant pheromone type for each cell
+            dominant_types = np.argmax(valid_pheromones, axis=-1)
+            max_concentrations_valid = np.max(valid_pheromones, axis=-1)
+
+            # Normalize concentrations
+            normalized = np.clip(
+                (max_concentrations_valid - MIN_DETECTABLE_PHEROMONE_CONCENTRATION) /
+                (MAX_DETECTABLE_PHEROMONE_CONCENTRATION - MIN_DETECTABLE_PHEROMONE_CONCENTRATION),
+                0, 1
+            )
+
+            # Apply gamma correction
+            gamma = 3.0
+            alphas = ((normalized ** (1 / gamma)) * 255).astype(int)
+
+            # Draw all circles
+            radius = int(self.cell_size / 2)
+            for idx in range(len(i_indices)):
+                pheromone_color = PHEROMONE_COLORS[dominant_types[idx]]
+
+                pygame.draw.circle(
+                    pheromone_surface,
+                    (*pheromone_color, alphas[idx]),
+                    (x_positions[idx], y_positions[idx]),
+                    radius
+                )
+
+            # Blit to main canvas
             canvas.blit(pheromone_surface, (0, 0))
-
 
         def _assign_segments_vectorized(angles, segment_boundaries):
             """Vectorized segment assignment"""
