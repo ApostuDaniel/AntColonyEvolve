@@ -18,6 +18,7 @@ from gymnasium.utils import colorize, seeding
 from pettingzoo import ParallelEnv
 from pettingzoo.utils import parallel_to_aec, wrappers
 from scipy.signal import convolve2d
+from scipy.ndimage import convolve
 
 from configs.arena_config import *
 
@@ -493,86 +494,6 @@ class Ant():
 
         return detected_food, density_areas, food_in_eating_range
 
-    # def _detect_pheromones(self, pheromone_grid, cell_size):
-    #     """Detect pheromones in each vision segment"""
-    #     # Initialize sensor array: 2 ranges x 3 segments x 3 pheromone types
-    #     sensors = np.zeros((len(pheromone_ranges), len(vision_segments), PHEROMONE_TYPES))
-    #
-    #     if pheromone_grid is None:
-    #         return sensors
-    #
-    #     # Get grid position
-    #     grid_x = int(self.pos.x / cell_size)
-    #     grid_y = int(self.pos.y / cell_size)
-    #
-    #     # Calculate search range
-    #     max_range = PHEROMONE_DETECTION_MAX_RANGE
-    #     grid_range = int(max_range / cell_size) + 1
-    #
-    #     # Get grid bounds
-    #     min_i = max(0, grid_y - grid_range)
-    #     max_i = min(pheromone_grid.shape[0], grid_y + grid_range + 1)
-    #     min_j = max(0, grid_x - grid_range)
-    #     max_j = min(pheromone_grid.shape[1], grid_x + grid_range + 1)
-    #
-    #     # Pre-calculate segment boundaries once
-    #     segment_boundaries = self._get_segment_boundaries()
-    #     ranges_squared = [r ** 2 for r in pheromone_ranges]
-    #     max_range_squared = max(ranges_squared)
-    #     dim_squared = ANT_DIM.x ** 2
-    #     for i in range(min_i, max_i):
-    #         for j in range(min_j, max_j):
-    #             # Calculate world position of cell center
-    #             cell_x = (j + 0.5) * cell_size
-    #             cell_y = (i + 0.5) * cell_size
-    #
-    #             if not np.sum(pheromone_grid[i, j]) >= 0.1:
-    #                 continue
-    #
-    #             # Calculate vector from ant to cell
-    #             dx = cell_x - self.pos.x
-    #             dy = cell_y - self.pos.y
-    #             # distance = math.sqrt(dx ** 2 + dy ** 2)
-    #             distance_squared = dx ** 2 + dy ** 2
-    #
-    #             # Skip if beyond vision range
-    #             # skip if directly under ant
-    #             if distance_squared > max_range_squared or distance_squared < dim_squared:
-    #                 continue
-    #
-    #             # angle relative to ant
-    #             angle = math.atan2(dy, dx) % (2 * math.pi)
-    #
-    #             # angle relative to ant's heading
-    #             relative_angle = (angle - self.theta + math.pi) % (2 * math.pi) - math.pi
-    #
-    #             # Early skip if outside vision cone
-    #             if not (vision_segments[0][0][0] <= relative_angle <= vision_segments[-1][0][-1]):
-    #                 continue
-    #
-    #             # Determine which range bin the cell belongs to
-    #             range_idx = None
-    #             for idx, r in enumerate(ranges_squared):
-    #                 if distance_squared <= r:
-    #                     range_idx = idx
-    #                     break
-    #
-    #             # Skip if not in any range bin
-    #             if range_idx is None:
-    #                 continue
-    #
-    #             for start_angle, stop_angle, segment_idx in segment_boundaries:
-    #                 if start_angle < stop_angle:
-    #                     if start_angle <= angle <= stop_angle:
-    #                         sensors[range_idx, segment_idx] += pheromone_grid[i, j]
-    #                         break
-    #                 elif angle >= start_angle or angle <= stop_angle:
-    #                     # Angle wraps around 2π boundary
-    #                     sensors[range_idx, segment_idx] += pheromone_grid[i, j]
-    #                     break
-    #
-    #     return sensors
-
     def _detect_pheromones(self, pheromone_grid, cell_size):
         """Detect pheromones in each vision segment - vectorized version"""
         sensors = np.zeros((len(pheromone_ranges), len(vision_segments), PHEROMONE_TYPES))
@@ -1003,11 +924,20 @@ class AntColonyEnv(ParallelEnv):
         # self.arena_mask = x * x + y * y <= mask_radius * mask_radius
 
         # Diffusion kernel
-        self.diffusion_kernel = np.array([
-            [0.01, 0.01, 0.01],
-            [0.01, .92, 0.01],  # Center keeps 92%, neighbors get 1% each
-            [0.01, 0.01, 0.01]
+        self.diffusion_kernel = self._create_diffuse_decay_kernel(PHEROMONE_DECAY, PHEROMONE_RETENTION)
+
+    def _create_diffuse_decay_kernel(self, decay_rate, diffusion_rate):
+        # pheromone diffusion to the corners will be smaller
+        orthogonal_rate = (diffusion_rate * (3 / 4)) / 4
+        diagonal_rate = (diffusion_rate * (1 / 4)) / 4
+
+        kernel = np.array([
+            [diagonal_rate, orthogonal_rate, diagonal_rate],
+            [orthogonal_rate, 1.0 - diffusion_rate, orthogonal_rate],
+            [diagonal_rate, orthogonal_rate, diagonal_rate]
         ])
+        # Apply decay to entire kernel
+        return kernel * decay_rate
 
     # Observation space should be defined here.
     # lru_cache allows observation and action spaces to be memoized, reducing clock cycles required to get each agent's space.
@@ -1146,26 +1076,19 @@ class AntColonyEnv(ParallelEnv):
         for i in range(PHEROMONE_TYPES):
             self.pheromone_grid[:, :, i] *= self.arena_mask
 
-    def _diffuse_pheromones(self):
+    def _diffuse_decay_pheromones(self):
         """Apply diffusion to pheromone grid using convolution"""
-        # Create a copy to avoid modifying during convolution
-        diffused_grid = np.zeros_like(self.pheromone_grid)
+        from scipy.ndimage import convolve
 
-        # Apply convolution to each pheromone type separately
-        for i in range(PHEROMONE_TYPES):
-            channel = self.pheromone_grid[:, :, i]
-            # Apply convolution with boundary='fill' to prevent edge artifacts
-            diffused = convolve2d(
-                channel,
-                self.diffusion_kernel,
-                mode='same',
-                boundary='fill',
-                fillvalue=0
-            )
-            diffused_grid[:, :, i] = diffused
+        # More efficient: process all channels at once
+        # convolve can handle 3D arrays
+        self.pheromone_grid = convolve(
+            self.pheromone_grid,
+            self.diffusion_kernel[:, :, np.newaxis],  # Add channel dimension
+            mode='constant',
+            cval=0.0
+        )
 
-        # Update the pheromone grid
-        self.pheromone_grid = diffused_grid
         # # Optional: Apply arena mask to zero out pheromones outside arena
         # self._apply_arena_mask()
 
@@ -1263,12 +1186,7 @@ class AntColonyEnv(ParallelEnv):
         and any other additional information if necessary.
         """
 
-        # Apply pheromone decay
-        self.pheromone_grid *= PHEROMONE_DECAY
-
-        # Apply diffusion every 15 time steps
-        # if self.t % 15 == 0:
-        #     self._diffuse_pheromones()
+        self._diffuse_decay_pheromones()
 
         # Pygame controls and resources if render_mode == 'human'
         if self.render_mode == "human":
@@ -1389,120 +1307,59 @@ class AntColonyEnv(ParallelEnv):
 
         def draw_pheromones():
             # Draw pheromone concentrations only within bounding square
+            pheromone_surface = pygame.Surface(
+                (canvas.get_width(), canvas.get_height()),
+                pygame.SRCALPHA
+            )
+
             for i in range(grid_top, grid_bottom):
                 for j in range(grid_left, grid_right):
                     pheromones = self.pheromone_grid[i, j]
                     total_pheromone = np.sum(pheromones)
 
-                    if total_pheromone > 0.01:  # Only draw significant concentrations
-                        x = int((j + 0.5) * self.cell_size)
-                        y = int((i + 0.5) * self.cell_size)
+                    if total_pheromone < MIN_DETECTABLE_PHEROMONE_CONCENTRATION:  # Only draw significant concentrations
+                        continue
 
-                        # Skip if outside arena circle
-                        dx = x - arena_center_x
-                        dy = y - arena_center_y
-                        distance = math.sqrt(dx ** 2 + dy ** 2)
-                        if distance > arena_radius:
-                            continue
+                    x = int((j + 0.5) * self.cell_size)
+                    y = int((i + 0.5) * self.cell_size)
 
-                        # Create blended color based on pheromone types
-                        r = min(255, int(pheromones[0] * 255))
-                        g = min(255, int(pheromones[1] * 255))
-                        b = min(255, int(pheromones[2] * 255))
-                        alpha = min(255, int(total_pheromone * 100))
+                    # Skip if outside arena circle
+                    dx = x - arena_center_x
+                    dy = y - arena_center_y
+                    distance = math.sqrt(dx ** 2 + dy ** 2)
 
-                        # Draw concentration circle
-                        pygame.draw.circle(
-                            canvas,
-                            (r, g, b, alpha),
-                            (x, y),
-                            int(self.cell_size / 2)
-                        )
+                    if distance > arena_radius:
+                        continue
 
-        # def draw_ant_grid_vision():
-        #     for agent in self.agents:
-        #         ant = self.ants[agent]
-        #         # Get grid position
-        #         grid_x = int(ant.pos.x / self.cell_size)
-        #         grid_y = int(ant.pos.y / self.cell_size)
-        #
-        #         # Calculate search range
-        #         max_range = PHEROMONE_DETECTION_MAX_RANGE
-        #         grid_range = int(max_range / self.cell_size) + 1
-        #
-        #         # Get grid bounds
-        #         min_i = max(0, grid_y - grid_range)
-        #         max_i = min(self.pheromone_grid.shape[0], grid_y + grid_range + 1)
-        #         min_j = max(0, grid_x - grid_range)
-        #         max_j = min(self.pheromone_grid.shape[1], grid_x + grid_range + 1)
-        #
-        #         # Pre-calculate segment boundaries once
-        #         segment_boundaries = ant._get_segment_boundaries()
-        #
-        #         for i in range(min_i, max_i):
-        #             for j in range(min_j, max_j):
-        #                 # Calculate world position of cell center
-        #                 cell_x = (j + 0.5) * self.cell_size
-        #                 cell_y = (i + 0.5) * self.cell_size
-        #
-        #                 r, g, b = 255, 0, 0
-        #                 if np.sum(self.pheromone_grid[i, j]) >= 0.1:
-        #                     r, g, b = 0, 255, 0
-        #
-        #                 # Calculate vector from ant to cell
-        #                 dx = cell_x - ant.pos.x
-        #                 dy = cell_y - ant.pos.y
-        #                 distance = math.sqrt(dx ** 2 + dy ** 2)
-        #
-        #                 # Skip if beyond vision range
-        #                 # skip if directly under ant
-        #                 if distance > max_range or distance < ANT_DIM.x:
-        #                     continue
-        #
-        #                 # Determine which range bin the cell belongs to
-        #                 range_idx = None
-        #                 for idx, pheromone_range in enumerate(pheromone_ranges):
-        #                     if distance <= pheromone_range:
-        #                         range_idx = idx
-        #                         break
-        #
-        #                 # Skip if not in any range bin
-        #                 if range_idx is None:
-        #                     continue
-        #
-        #                 # diferentiate colours between ranges by blue
-        #                 b = (200 * range_idx) % 256
-        #                 colour = (r, g, b)
-        #
-        #                 angle = math.atan2(dy, dx) % (2 * math.pi)
-        #
-        #                 for start_angle, stop_angle, segment_idx in segment_boundaries:
-        #                     if start_angle < stop_angle:
-        #                         if start_angle <= angle <= stop_angle:
-        #                             pygame.draw.rect(
-        #                                 canvas,
-        #                                 colour,
-        #                                 (
-        #                                     j * self.cell_size,
-        #                                     i * self.cell_size,
-        #                                     ANT_DIM.x,
-        #                                     ANT_DIM.x
-        #                                 )
-        #                             )
-        #                             break
-        #                     elif angle >= start_angle or angle <= stop_angle:
-        #                         # Angle wraps around 2π boundary
-        #                         pygame.draw.rect(
-        #                             canvas,
-        #                             colour,
-        #                             (
-        #                                 j * self.cell_size,
-        #                                 i * self.cell_size,
-        #                                 ANT_DIM.x,
-        #                                 ANT_DIM.x
-        #                             )
-        #                         )
-        #                         break
+                    # Normalize each pheromone type to 0-1 range
+                    normalized = np.clip(
+                        (pheromones - MIN_DETECTABLE_PHEROMONE_CONCENTRATION) /
+                        (MAX_DETECTABLE_PHEROMONE_CONCENTRATION - MIN_DETECTABLE_PHEROMONE_CONCENTRATION),
+                        0, 1
+                    )
+
+                    total_normalized = np.clip(
+                        (total_pheromone - MIN_DETECTABLE_PHEROMONE_CONCENTRATION) /
+                        (MAX_DETECTABLE_PHEROMONE_CONCENTRATION - MIN_DETECTABLE_PHEROMONE_CONCENTRATION),
+                        0, 1
+                    )
+
+                    # Create blended color based on pheromone types
+                    gamma = 3.0  # Adjust between 1.5-3.0 for different looks
+                    rgb = (normalized ** (1 / gamma) * 255).astype(int)
+                    alpha = int((total_normalized ** (1 / gamma)) * 255)
+
+                    # Draw concentration circle
+                    pygame.draw.circle(
+                        pheromone_surface,
+                        (rgb[0], rgb[1], rgb[2], alpha),
+                        (x, y),
+                        int(self.cell_size / 2)
+                    )
+
+            canvas.blit(pheromone_surface, (0, 0))
+
+
         def _assign_segments_vectorized(angles, segment_boundaries):
             """Vectorized segment assignment"""
             segment_indices = np.full(len(angles), -1, dtype=int)
