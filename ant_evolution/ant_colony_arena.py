@@ -754,9 +754,9 @@ class Ant():
         if pheromone_grid is not None and cell_size is not None:
             self.pheromone_sensors = self._detect_pheromones(pheromone_grid, cell_size)
             # clip value to max detectable
-            np.clip(self.pheromone_sensors, 0, MAX_DETECTABLE_PHEROMONE_CONCENTRATION)
+            self.pheromone_sensors = np.clip(self.pheromone_sensors, 0, MAX_PHEROMONE_CONCENTRATION_PER_ZONE)
             # normalize concentrations
-            self.pheromone_sensors /= MAX_DETECTABLE_PHEROMONE_CONCENTRATION
+            self.pheromone_sensors /= MAX_PHEROMONE_CONCENTRATION_PER_ZONE
 
         if nest is not None:
             (nest_distance, nest_angle, ant_in_nest) = self._detect_nest(nest)
