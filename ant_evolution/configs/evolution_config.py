@@ -27,9 +27,9 @@ def get_input_coordinates():
     vision_segments_x_coord = [-1. + i * 2. / (len(vision_segments) - 1) for i in range(len(vision_segments))]
 
     # provide density areas coordinates
-    # vision_ranges_y_coord = [-0.4 - 0.1 * i for i in range(len(view_ranges))]
-    # for y in vision_ranges_y_coord:
-    #     inputs.extend([(x, y) for x in vision_segments_x_coord])
+    vision_ranges_y_coord = [-0.4 - 0.1 * i for i in range(len(view_ranges))]
+    for y in vision_ranges_y_coord:
+        inputs.extend([(x, y) for x in vision_segments_x_coord])
 
     # provide pheromones coordinates
     pheromone_ranges_y_modifiers = [0.15 * i for i in range(len(pheromone_ranges))]
@@ -38,8 +38,8 @@ def get_input_coordinates():
             inputs.extend([(x, -0.2 - (i * 0.04) + y_modifier) for i in range(PHEROMONE_TYPES)])  # pheromone coordinates for each vision segment
 
     inputs.extend([(x, 0.05) for x in vision_segments_x_coord])  # vision_segments_wall_distances
-    inputs.extend([(x, 0.2) for x in vision_segments_x_coord])  # vision_segments_food_distances
-    inputs.extend([(x, 0.3) for x in vision_segments_x_coord])  # vision_segments_food_angles
+    # inputs.extend([(x, 0.2) for x in vision_segments_x_coord])  # vision_segments_food_distances
+    # inputs.extend([(x, 0.3) for x in vision_segments_x_coord])  # vision_segments_food_angles
 
     return inputs
 

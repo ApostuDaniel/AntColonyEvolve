@@ -5,9 +5,9 @@ import os
 
 SIM_FPS = 60  # Simulation environment FPS
 
-SCREEN_W = 960
-SCREEN_H = 960
-BOUNDARY_SCALE = 0.01
+SCREEN_W = 1152
+SCREEN_H = 1152
+BOUNDARY_SCALE = 0.005
 
 vec2d = namedtuple('vec2d', ['x', 'y'])
 arena_sizes = namedtuple('arena_sizes', ['arena_center', 'arena_radius'])
@@ -42,7 +42,7 @@ DRAW_ANT_VISION = True
 DRAW_FOOD_DENSITY = True
 DRAW_PHEROMONES = True
 DRAW_PHEROMONE_VISION = True
-DRAW_FOOD_GRID = True
+DRAW_FOOD_GRID = False
 HIGHLIGHT_BEST_ANT = False
 
 # 5 vision segments

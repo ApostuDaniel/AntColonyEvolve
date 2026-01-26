@@ -843,17 +843,17 @@ class Ant():
 
         # add scaled nearest wall distances per vision segment
         result.extend([self.wall_distances[i] for i in range(len(self.wall_distances))])
-        # add nearest food distances per vision segment
-        result.extend([self.nearest_food_distances[i] for i in range(len(self.nearest_food_distances))])
-        # add normalized angle to nearest food per vision segment
-        result.extend([self.nearest_food_angles[i] for i in range(len(self.nearest_food_angles))])
+        # # add nearest food distances per vision segment
+        # result.extend([self.nearest_food_distances[i] for i in range(len(self.nearest_food_distances))])
+        # # add normalized angle to nearest food per vision segment
+        # result.extend([self.nearest_food_angles[i] for i in range(len(self.nearest_food_angles))])
 
         # Include the food density for each food detection area
 
-        # for segment_idx in range(len(vision_segments)):
-        #     # result.append(density_areas[segment_idx][0]['food'])
-        #     for range_idx in range(len(view_ranges)):
-        #         result.append(density_areas[segment_idx][range_idx]['food'])
+        for segment_idx in range(len(vision_segments)):
+            # result.append(density_areas[segment_idx][0]['food'])
+            for range_idx in range(len(view_ranges)):
+                result.append(density_areas[segment_idx][range_idx]['food'])
 
         return result
 
@@ -1023,9 +1023,9 @@ class AntColonyEnv(ParallelEnv):
             "angle_to_nest": Box(0.0, 1., (1,), np.float32),
             # 'pheromone_sensors': Box(0.0, 1.0, (len(pheromone_ranges) * len(vision_segments) * PHEROMONE_TYPES,)),
             'vision_segments_wall_distances': Box(0.0, 1.0, (len(vision_segments), np.float32)),
-            'vision_segments_food_distances': Box(0.0, 1.0, (len(vision_segments), np.float32)),
-            'vision_segments_food_angles': Box(-1.0, 1., (len(vision_segments),)),
-            # 'density_areas': Box(0.0, 1.0,(len(vision_segments) * len(view_ranges),)),
+            # 'vision_segments_food_distances': Box(0.0, 1.0, (len(vision_segments), np.float32)),
+            # 'vision_segments_food_angles': Box(-1.0, 1., (len(vision_segments),)),
+            'density_areas': Box(0.0, 1.0,(len(vision_segments) * len(view_ranges),)),
             # used when testing just the closest density sensors
             # 'density_areas': Box(0.0, 1.0, (len(vision_segments),)),
         }
