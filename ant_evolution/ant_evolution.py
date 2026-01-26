@@ -2,6 +2,7 @@ import copy
 import logging
 import os
 import pickle
+import time
 from datetime import datetime
 
 import numpy as np
@@ -62,7 +63,7 @@ def ini_pop(state, stats, config, output, output_dir=None):
     pop.add_reporter(stats)
     return pop
 
-def worker_init(env_fun, agents_in_env):
+def worker_init(env_fun, agents_in_env, seed=None):
     """Initialize worker-local environment once"""
     global worker_env
     worker_env = env_fun(agents_in_env)  # Create once per worker
@@ -177,6 +178,9 @@ def run_es(gens, env_fun, trials, max_steps, config, params, substrate, single_n
             net = es_net.create_phenotype_network()
             phenotype_nets.append(net)
 
+        generation_seed = int(time.time())
+        cpu_count = os.cpu_count()
+
         # Prepare trial runner
         env_runner = partial(
             _run_one_env,
@@ -184,15 +188,17 @@ def run_es(gens, env_fun, trials, max_steps, config, params, substrate, single_n
 
         # Run envs in parallel
         with concurrent.futures.ProcessPoolExecutor(
-            max_workers=16,
+            max_workers=cpu_count,
             initializer=worker_init,
-            initargs=(env_fun, agents_in_env)
+            initargs=(env_fun, agents_in_env, generation_seed)
         ) as executor:
             # Map each environment to a net
-            futures = []
-            for j in range(trials):
-                for i, net in enumerate(phenotype_nets):
-                    futures.append(executor.submit(env_runner, i, net, networks[i].activations))
+            futures = [
+                executor.submit(env_runner, i, net, networks[i].activations)
+                for j in range(trials)
+                for i, net in enumerate(phenotype_nets)
+            ]
+
             results = [f.result() for f in concurrent.futures.as_completed(futures)]
 
         # sort and group results by genome index, should be 'trials' results with the same index
