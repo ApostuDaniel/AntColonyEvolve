@@ -14,29 +14,29 @@ arena_sizes = namedtuple('arena_sizes', ['arena_center', 'arena_radius'])
 
 # Global parameters for agent control
 TIMESTEP = 1. / SIM_FPS  # Not sure if this will be necessary, given the fixed FPS?
-TIME_LIMIT = SIM_FPS * 10  # 12 seconds
+TIME_LIMIT = SIM_FPS * 10  # 10 seconds
 
-ANT_DIM = vec2d(7, 7)
-AGENT_SPEED = 13.00  # Maximum ant speed observed in data (pixels)
-AGENT_ACCELERATION = 5.0
-TURN_RATE = 2 * 0.3575  # Maximum turning rate observed in data (radians)
+ANT_DIM = vec2d(6, 6)
+AGENT_SPEED = 12.00  # Maximum ant speed observed in data (pixels)
+AGENT_ACCELERATION = 4.0
+TURN_RATE = math.pi / 2  # When turn_left = 1 and turn_right = -1 ori viceversa, allows maximum 180° turn per step
 MAX_TRAVEL_PER_EPISODE = AGENT_SPEED * TIME_LIMIT
 
-NEST_RADIUS = SCREEN_W / 20
+NEST_RADIUS = ANT_DIM[0] * 6
 DRAW_NEST_SENSORS = True
 
 SPEED_PENALTY_BASE = 1.5 ** (1 / AGENT_SPEED)
 
-MAX_VISION_RANGE = ANT_DIM.x * 16
+MAX_VISION_RANGE = ANT_DIM.x * 14
 MIDDLE_VISION_RANGE = int(MAX_VISION_RANGE * (2 / 3))
-MIN_VISION_RANGE = int(MAX_VISION_RANGE * (1 / 3))
+MIN_VISION_RANGE = int(MAX_VISION_RANGE * (1 / 2))
 
 MAX_FOOD_QUANTITY = 150
 FOOD_SIZE_SCALING = 0.3
-ANT_CARRY_CAPACITY = 30
+ANT_CARRY_CAPACITY = 3
 ANT_LIFE = 150
 SHOULD_FOOD_DECREASE = True
-SHOULD_FOOD_RESPAWN = True
+SHOULD_FOOD_RESPAWN = False
 
 DRAW_ANT_VISION = True
 DRAW_FOOD_DENSITY = True
@@ -72,8 +72,8 @@ vision_segments = [
 
 PHEROMONE_DETECTION_MAX_RANGE = MIN_VISION_RANGE
 PHEROMONE_DETECTION_MIN_RANGE = PHEROMONE_DETECTION_MAX_RANGE / 1.5
-PHEROMONE_TYPES = 3
-PHEROMONE_COLORS = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
+PHEROMONE_TYPES = 2
+PHEROMONE_COLORS = [(255, 0, 0), (0, 0, 255)]
 PHEROMONE_DECAY = 0.985
 PHEROMONE_DIFFUSION = 0.05
 PHEROMONE_DEPOSIT = 1.0
@@ -81,8 +81,8 @@ MAX_PHEROMONE_CONCENTRATION_PER_ZONE = 6
 MAX_DETECTABLE_PHEROMONE_CONCENTRATION = 2
 MIN_DETECTABLE_PHEROMONE_CONCENTRATION = 0.01
 
-view_ranges = [MIN_VISION_RANGE, MIDDLE_VISION_RANGE, MAX_VISION_RANGE]
-pheromone_ranges = [PHEROMONE_DETECTION_MIN_RANGE, PHEROMONE_DETECTION_MAX_RANGE]
+view_ranges = [MAX_VISION_RANGE]
+pheromone_ranges = [PHEROMONE_DETECTION_MIN_RANGE]
 
 """
 Observation name and whether it should be used or not
@@ -166,8 +166,8 @@ def load_parameters(config_file):
         PHEROMONE_DEPOSIT = config.getfloat('Arena', 'PHEROMONE_DEPOSIT', fallback=PHEROMONE_DEPOSIT)
         MIN_DETECTABLE_PHEROMONE_CONCENTRATION = config.getfloat('Arena', 'MIN_DETECTABLE_PHEROMONE_CONCENTRATION', fallback=MIN_DETECTABLE_PHEROMONE_CONCENTRATION)
         MAX_DETECTABLE_PHEROMONE_CONCENTRATION = config.getfloat('Arena', 'MAX_DETECTABLE_PHEROMONE_CONCENTRATION', fallback=MAX_DETECTABLE_PHEROMONE_CONCENTRATION)
-        view_ranges = [MIN_VISION_RANGE, MIDDLE_VISION_RANGE, MAX_VISION_RANGE]
-        pheromone_ranges = [PHEROMONE_DETECTION_MIN_RANGE, PHEROMONE_DETECTION_MAX_RANGE]
+        view_ranges = [MAX_VISION_RANGE]
+        pheromone_ranges = [PHEROMONE_DETECTION_MIN_RANGE]
 
     # Update vision segments
     new_vision_segments = parse_vision_segments(config)

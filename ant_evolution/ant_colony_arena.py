@@ -302,7 +302,7 @@ class Ant():
         self.wall_collision = False
 
         # Pheromone sensing per segment
-        self.pheromone_sensors = np.zeros((len(vision_segments), PHEROMONE_TYPES))  # 3 segments x 3 types
+        self.pheromone_sensors = np.zeros((len(vision_segments), PHEROMONE_TYPES))  # n segments x m types
         self.pheromone_deposit_type = None  # Current deposit type
 
     def _compute_distance_to_wall(self, angle):
@@ -727,8 +727,11 @@ class Ant():
             self.current_energy = ANT_LIFE
             return
 
-        health_lost = speed_penalty_square(self.speed) + rotation_penalty_square(turn_right, turn_left) + int(
-            self.wall_collision)  # decrease extra if colliding with wall
+        # health_lost = speed_penalty_square(self.speed) + rotation_penalty_square(turn_right, turn_left) + int(
+        #     self.wall_collision)  # decrease extra if colliding with wall
+
+        health_lost = int(self.wall_collision)  # decrease extra if colliding with wall
+
         # if self.carried_food >= health_lost:
         #     self.carried_food -= health_lost
         # else:
@@ -737,33 +740,30 @@ class Ant():
 
         if self.current_energy >= health_lost:
             self.current_energy -= health_lost
-        else:
-            self.carried_food -= health_lost
-            if self.carried_food < 0:  # subtract the remaining health
-                self.current_energy += self.carried_food
-                self.carried_food = 0
+        # else:
+        #     self.carried_food -= health_lost
+        #     if self.carried_food < 0:  # subtract the remaining health
+        #         self.current_energy += self.carried_food
+        #         self.carried_food = 0
 
-    def place_pheromone(self, pheromone_action, pheromone_grid, grid_width, grid_height, cell_size):
+    def place_pheromone(self, pheromone_action, pheromone_grid, pheromone_intervals, cell_size):
         grid_x = int(self.pos.x / cell_size)
         grid_y = int(self.pos.y / cell_size)
 
-        if 0 <= grid_x < grid_width and 0 <= grid_y < grid_height:
-            # Determine deposit type based on action value
-            if pheromone_action < -0.5:
-                # Type 1 (red)
-                pheromone_grid[grid_y, grid_x, 0] = min(pheromone_grid[grid_y, grid_x, 0] + PHEROMONE_DEPOSIT, MAX_DETECTABLE_PHEROMONE_CONCENTRATION)
-                self.pheromone_deposit_type = 0
-            elif pheromone_action < 0:
-                # Type 2 (green)
-                pheromone_grid[grid_y, grid_x, 1] = min(pheromone_grid[grid_y, grid_x, 1] + PHEROMONE_DEPOSIT, MAX_DETECTABLE_PHEROMONE_CONCENTRATION)
-                self.pheromone_deposit_type = 1
-            elif pheromone_action < 0.5:
-                # No deposit
-                self.pheromone_deposit_type = None
-            else:
-                # Type 3 (blue)
-                pheromone_grid[grid_y, grid_x, 2] = min(pheromone_grid[grid_y, grid_x, 2] + PHEROMONE_DEPOSIT, MAX_DETECTABLE_PHEROMONE_CONCENTRATION)
-                self.pheromone_deposit_type = 2
+        # we want the interval for no pheromone placement to be close to the 0 value
+        no_pheromone_interval = PHEROMONE_TYPES / 2
+
+        fitting_pheromone_mask = (pheromone_action >= pheromone_intervals[:, 0]) & (pheromone_action <= pheromone_intervals[:, 1])
+
+        idx = np.argmax(fitting_pheromone_mask)
+
+        if idx == no_pheromone_interval: return
+        # pheromones in the intervals after no_pheromone_interval are offset by 1
+        pheromone_to_place = idx if idx < no_pheromone_interval else idx - 1
+
+        self.pheromone_deposit_type = pheromone_to_place
+        pheromone_grid[grid_y, grid_x, pheromone_to_place] = min(pheromone_grid[grid_y, grid_x, pheromone_to_place] + PHEROMONE_DEPOSIT,
+                                                MAX_DETECTABLE_PHEROMONE_CONCENTRATION)
 
     def set_action(self, action):
         acceleration, turn_left, turn_right = action
@@ -827,14 +827,14 @@ class Ant():
             # theta_norm,  # Normalized angular position
             self.speed / AGENT_SPEED,  # Normalized current speed
             self.theta / (2 * math.pi),  # Normalized current orientation
-            time / (TIME_LIMIT * SIM_FPS),  # HEARTBEAT
-            self.traveled_distance / MAX_TRAVEL_PER_EPISODE,  # normalized travel distance
+            # time / (TIME_LIMIT * SIM_FPS),  # HEARTBEAT
+            # self.traveled_distance / MAX_TRAVEL_PER_EPISODE,  # normalized travel distance
             self.current_energy / ANT_LIFE,  # normalized health
             self.carried_food / ANT_CARRY_CAPACITY,  # normalize food carry
             int(ant_in_nest),  # 1 if ant is in nest, 0 otherwise
             int(self.current_food > 0 or (self.carried_food > 0 and ant_in_nest)),  # reward sensor
-            int(int(self.wall_collision)),  # penalty sensor
-            nest_distance / (self.arena_radius * 2),
+            int(self.wall_collision),  # penalty sensor
+            # nest_distance / (self.arena_radius * 2),
             # normalize to arena diameter, the maximum distance between ant and nest
             nest_angle / (2 * math.pi),  # normalized angle to nest
         ]
@@ -851,7 +851,6 @@ class Ant():
         # Include the food density for each food detection area
 
         for segment_idx in range(len(vision_segments)):
-            # result.append(density_areas[segment_idx][0]['food'])
             for range_idx in range(len(view_ranges)):
                 result.append(density_areas[segment_idx][range_idx]['food'])
 
@@ -968,6 +967,10 @@ class AntColonyEnv(ParallelEnv):
         self.pheromone_grid = np.zeros((self.grid_height, self.grid_width, PHEROMONE_TYPES),
                                        dtype=np.float32)
 
+        # need two more points to represent PHEROMONE_TYPES + 1 intervals, 1 extra for placing no pheromone
+        interval_points = np.linspace(-1, 1, PHEROMONE_TYPES + 2)
+        self.pheromone_intervals = np.column_stack((interval_points[:-1], interval_points[1:]))
+
         # Add spatial grid
         self.food_grid = None
         # add food radius to ensure that center of food is in square
@@ -1019,7 +1022,7 @@ class AntColonyEnv(ParallelEnv):
             "ant_in_nest": Box(0., 1., (1,), np.float32),
             "reward_sensor": Box(0., 1., (1,), np.float32),
             "penalty_sensor": Box(0., 1., (1,), np.float32),
-            "distance_to_nest": Box(0.0, 1., (1,), np.float32),
+            # "distance_to_nest": Box(0.0, 1., (1,), np.float32),
             "angle_to_nest": Box(0.0, 1., (1,), np.float32),
             # 'pheromone_sensors': Box(0.0, 1.0, (len(pheromone_ranges) * len(vision_segments) * PHEROMONE_TYPES,)),
             'vision_segments_wall_distances': Box(0.0, 1.0, (len(vision_segments), np.float32)),
@@ -1055,14 +1058,14 @@ class AntColonyEnv(ParallelEnv):
         Calculate the reward of the ant based on whether their closest view range detects food
         """
         ant = self.ants[agent]
-        # negative reward if agent died
-        if self.terminations[agent]:
-            ant.total_reward -= 100
-            return -100
+        # # negative reward if agent died
+        # if self.terminations[agent]:
+        #     ant.total_reward -= 100
+        #     return -100
 
         # turn_left, turn_right = actions[1:3]
         nest_reward = self.nest.food_register.get(agent, 0)
-        reward = nest_reward * 5 + ant.current_food * 0.8
+        reward = nest_reward * 3 + ant.current_food
         ant.total_reward += reward
 
         return reward
@@ -1085,7 +1088,7 @@ class AntColonyEnv(ParallelEnv):
     def _respawn_food(self, respawn_eaten_food=True):
         rng = np.random.default_rng()
         max_food_draw_radius = (self.ant_arena.arena_radius * 2) * 0.5 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING) * 2
-        min_food_draw_radius = (self.ant_arena.arena_radius * 2) * 0.3
+        min_food_draw_radius = (self.ant_arena.arena_radius * 2) * 0.2
 
         # max_food_draw_radius = self.nest.radius * 8 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING) * 2
 
@@ -1255,7 +1258,7 @@ class AntColonyEnv(ParallelEnv):
         # don't respawn food for pheromone training
         self._respawn_food(SHOULD_FOOD_RESPAWN)
         for agent, action in actions.items():
-            self.ants[agent].place_pheromone(action[3], self.pheromone_grid, self.grid_width, self.grid_height, self.cell_size)
+            self.ants[agent].place_pheromone(action[3], self.pheromone_grid, self.pheromone_intervals, self.cell_size)
 
             self.ants[agent].set_action(action[:3])
             self.ants[agent].update()
@@ -1866,14 +1869,14 @@ class AntColonyEnv(ParallelEnv):
 
 
 if __name__ == "__main__":
-    env = AntColonyEnv(render_mode='human', nr_of_ants=1, nr_of_food=5)
+    env = AntColonyEnv(render_mode='human', nr_of_ants=1, nr_of_food=12)
 
     while True:
         total_reward = 0
         observations, infos = env.reset()
 
         manual_mode = True
-        manual_action = [0.0, 0.0, 0.0, -1.0]
+        manual_action = [0.0, 0.0, 0.0, 1.0]
 
         terminations = [False]
         truncations = [False]
@@ -1888,10 +1891,10 @@ if __name__ == "__main__":
                             done = True
                         if event.key == pygame.K_r:
                             env.reset()
-                        if event.key == pygame.K_UP:    manual_action[0:3] = [0.1, 0.0, 0.0]
-                        if event.key == pygame.K_DOWN:  manual_action[0:3] = [-0.1, 0.0, 0.0]
-                        if event.key == pygame.K_LEFT:  manual_action[1], manual_action[2] = 0.5, 0.0
-                        if event.key == pygame.K_RIGHT: manual_action[1], manual_action[2] = 0.0, 0.5
+                        if event.key == pygame.K_UP:    manual_action[0:3] = [0.2, 0.0, 0.0]
+                        if event.key == pygame.K_DOWN:  manual_action[0:3] = [-0.2, 0.0, 0.0]
+                        if event.key == pygame.K_LEFT:  manual_action[1], manual_action[2] = 0.15, 0.0
+                        if event.key == pygame.K_RIGHT: manual_action[1], manual_action[2] = 0.0, 0.15
                     elif event.type == pygame.KEYUP:
                         if event.key == pygame.K_UP:    manual_action[0] = 0.0
                         if event.key == pygame.K_DOWN:  manual_action[0] = 0.0
