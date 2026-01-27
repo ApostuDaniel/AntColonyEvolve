@@ -2,6 +2,7 @@ import copy
 import functools
 import logging
 import sys
+import time
 
 import warnings
 
@@ -926,9 +927,7 @@ class AntColonyEnv(ParallelEnv):
         'render_fps': SIM_FPS
     }
 
-    def __init__(self, nr_of_ants=10, nr_of_food=20, render_mode=None):
-        self.np_random, seed = self.seed(seed=69)
-
+    def __init__(self, nr_of_ants=10, nr_of_food=20, render_mode=None, seed=None):
         self.ants = None
         self.nest = None
         self.possible_agents = [f"ant_{i}" for i in range(nr_of_ants)]
@@ -953,6 +952,11 @@ class AntColonyEnv(ParallelEnv):
         self.clock = None
         self.terminations = {}
         self.truncations = {}
+
+        if seed is None:
+            seed = int(time.time())
+
+        self.np_random, _ = self.seed(seed)
 
         arena_center = (int(SCREEN_W / 2.0), int(SCREEN_H / 2.0))
         arena_radius = int(min(SCREEN_W, SCREEN_H) / 2.0 - min(SCREEN_W, SCREEN_H) * BOUNDARY_SCALE)
@@ -1086,7 +1090,6 @@ class AntColonyEnv(ParallelEnv):
         self.clock = None
 
     def _respawn_food(self, respawn_eaten_food=True):
-        rng = np.random.default_rng()
         max_food_draw_radius = (self.ant_arena.arena_radius * 2) * 0.5 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING) * 2
         min_food_draw_radius = (self.ant_arena.arena_radius * 2) * 0.2
 
@@ -1094,8 +1097,8 @@ class AntColonyEnv(ParallelEnv):
 
         def get_rand_food_params():
             while True:
-                x, y = rng.uniform(-max_food_draw_radius, max_food_draw_radius, size=2)
-                quantity = int(rng.uniform(MAX_FOOD_QUANTITY - 10, MAX_FOOD_QUANTITY))
+                x, y = self.np_random.uniform(-max_food_draw_radius, max_food_draw_radius, size=2)
+                quantity = int(self.np_random.uniform(MAX_FOOD_QUANTITY - 10, MAX_FOOD_QUANTITY))
                 # return int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y), quantity
                 x, y = int(self.nest.pos.x + x), int(self.nest.pos.y + y)
                 if (compute_distance(x, y, self.nest.pos.x, self.nest.pos.y) > min_food_draw_radius and
@@ -1108,7 +1111,7 @@ class AntColonyEnv(ParallelEnv):
             nest_r, nest_theta = to_polar_coordinates(self.nest.pos, self.ant_arena.arena_center,
                                                       self.ant_arena.arena_radius)
             food_theta = (nest_theta + 1) - 2 if nest_theta + 1 > 1 else nest_theta + 1
-            quantity = int(rng.uniform(MAX_FOOD_QUANTITY - 10, MAX_FOOD_QUANTITY))
+            quantity = int(self.np_random.uniform(MAX_FOOD_QUANTITY - 10, MAX_FOOD_QUANTITY))
             food_x, food_y = from_polar_coordinates((nest_r, food_theta), self.ant_arena.arena_center,
                                                     self.ant_arena.arena_radius, True)
             return food_x, food_y, quantity
@@ -1168,7 +1171,9 @@ class AntColonyEnv(ParallelEnv):
         self.agents = copy.deepcopy(self.possible_agents[:nr_of_agents])
 
         self.ants = {}
-        rng = np.random.default_rng()
+
+        if seed is not None:
+            self.np_random, _ = self.seed(seed=seed)
 
         # spawn nest
         # max_nest_draw_radius = self.ant_arena.arena_radius * 0.20 - NEST_RADIUS * 2
@@ -1176,7 +1181,7 @@ class AntColonyEnv(ParallelEnv):
         max_nest_draw_radius = self.ant_arena.arena_radius * 0.1
         min_nest_draw_radius = self.ant_arena.arena_radius * 0.0
         while True:
-            x, y = rng.uniform(-max_nest_draw_radius, max_nest_draw_radius, size=2)
+            x, y = self.np_random.uniform(-max_nest_draw_radius, max_nest_draw_radius, size=2)
             x, y = (int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y))
             if is_rectangle_in_circle(x, y, int(NEST_RADIUS), self.ant_arena.arena_center, self.ant_arena.arena_radius) \
                     and compute_distance(x, y, self.ant_arena.arena_center.x,
@@ -1188,9 +1193,9 @@ class AntColonyEnv(ParallelEnv):
         max_ant_draw_radius = self.nest.radius
         for agent in self.agents:
             while True:
-                x, y = rng.uniform(-max_ant_draw_radius, max_ant_draw_radius, size=2)
+                x, y = self.np_random.uniform(-max_ant_draw_radius, max_ant_draw_radius, size=2)
                 x, y = (int(self.nest.pos.x + x), int(self.nest.pos.y + y))
-                theta = rng.uniform(0.0, 2 * math.pi)
+                theta = self.np_random.uniform(0.0, 2 * math.pi)
                 if is_rectangle_in_circle(x, y, ANT_DIM.x, self.nest.pos, self.nest.radius):
                     self.ants[agent] = Ant((x, y), theta)
                     break
@@ -1199,10 +1204,10 @@ class AntColonyEnv(ParallelEnv):
         # max_ant_draw_radius = self.ant_arena.arena_radius * 0.80 - ANT_DIM.x * 2
         # for agent in self.agents:
         #     while True:
-        #         x, y = rng.uniform(-max_ant_draw_radius, max_ant_draw_radius, size=2)
+        #         x, y = self.np_random.uniform(-max_ant_draw_radius, max_ant_draw_radius, size=2)
         #         x, y = (int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y))
-        #         theta = rng.uniform(0.0, 2 * math.pi)
-        #         if is_rectangle_in_circle(x, y, self.ant_arena.arena_center, self.ant_arena.arena_radius):
+        #         theta = self.np_random.uniform(0.0, 2 * math.pi)
+        #         if is_rectangle_in_circle(x, y, ANT_DIM.x, self.ant_arena.arena_center, self.ant_arena.arena_radius):
         #             self.ants[agent] = Ant((x, y), theta)
         #             break
 

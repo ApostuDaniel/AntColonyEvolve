@@ -25,10 +25,12 @@ from configs.evolution_config import *
 
 # GLOBAL IN WORKER PROCESS
 worker_env = None
+worker_seed = 6
 
 INPUT_COORDINATES = get_input_coordinates()
 OUTPUT_COORDINATES = get_output_coordinates()
 SUBSTRATE = Substrate(INPUT_COORDINATES, OUTPUT_COORDINATES)
+
 
 def params(version):
     """
@@ -45,10 +47,12 @@ def params(version):
         "activation": "tanh"
     }
 
+
 # Config for CPPN.
 CONFIG = neat.config.Config(neat.genome.DefaultGenome, neat.reproduction.DefaultReproduction,
                             neat.species.DefaultSpeciesSet, neat.stagnation.DefaultStagnation,
                             'configs/config_cppn_ant_evolution')
+
 
 def ini_pop(state, stats, config, output, output_dir=None):
     """
@@ -63,10 +67,14 @@ def ini_pop(state, stats, config, output, output_dir=None):
     pop.add_reporter(stats)
     return pop
 
-def worker_init(env_fun, agents_in_env, seed=None):
+
+def worker_init(env_fun, agents_in_env, seed=6):
     """Initialize worker-local environment once"""
     global worker_env
-    worker_env = env_fun(agents_in_env)  # Create once per worker
+    global worker_seed
+    worker_seed = seed
+    worker_env = env_fun(agents_in_env, seed=seed)  # Create once per worker
+
 
 def _run_one_trial(nets, networks, env):
     """
@@ -110,7 +118,8 @@ def _run_one_trial(nets, networks, env):
 
     return total_rewards
 
-def _run_one_env(index, phenotype_net, nr_activations):
+
+def _run_one_env(index, phenotype_net, nr_activations, trial=0):
     """
     Helper function to run a single env with multiple copies of the same network.
 
@@ -119,11 +128,14 @@ def _run_one_env(index, phenotype_net, nr_activations):
     :param network: needed for activation
     :return:
     """
-    #Reuse worker-local environment for trials
+    # Reuse worker-local environment for trials
     global worker_env
+    global worker_seed
+
+    trial_seed = worker_seed + trial * 100
 
     # We do this because sometimes len of networks is smaller than len of agents
-    observations, infos = worker_env.reset()
+    observations, infos = worker_env.reset(seed=trial_seed)
     nr_of_agents = len(worker_env.agents)
     terminations = {"placeholder": False}
     truncations = {"placeholder": False}
@@ -159,7 +171,8 @@ def _run_one_env(index, phenotype_net, nr_activations):
     return index, (reward / nr_of_agents)
 
 
-def run_es(gens, env_fun, trials, max_steps, config, params, substrate, single_network_env=True, agents_in_env=1, parallel_trials=False, output=True, output_dir=None, load_population_path=None):
+def run_es(gens, env_fun, trials, max_steps, config, params, substrate, single_network_env=True, agents_in_env=1,
+           parallel_trials=False, output=True, output_dir=None, load_population_path=None):
     """
     Generic OpenAI Gym runner for ES-HyperNEAT.
     """
@@ -188,13 +201,13 @@ def run_es(gens, env_fun, trials, max_steps, config, params, substrate, single_n
 
         # Run envs in parallel
         with concurrent.futures.ProcessPoolExecutor(
-            max_workers=cpu_count,
-            initializer=worker_init,
-            initargs=(env_fun, agents_in_env, generation_seed)
+                max_workers=cpu_count,
+                initializer=worker_init,
+                initargs=(env_fun, agents_in_env, generation_seed)
         ) as executor:
             # Map each environment to a net
             futures = [
-                executor.submit(env_runner, i, net, networks[i].activations)
+                executor.submit(env_runner, i, net, networks[i].activations, j)
                 for j in range(trials)
                 for i, net in enumerate(phenotype_nets)
             ]
@@ -202,9 +215,10 @@ def run_es(gens, env_fun, trials, max_steps, config, params, substrate, single_n
             results = [f.result() for f in concurrent.futures.as_completed(futures)]
 
         # sort and group results by genome index, should be 'trials' results with the same index
-        #compute average for all trials
+        # compute average for all trials
         results.sort(key=lambda x: x[0])
-        mean_trials_results = [(key, sum(num for _, num in value) / trials) for key, value in itertools.groupby(results, lambda x: x[0])]
+        mean_trials_results = [(key, sum(num for _, num in value) / trials) for key, value in
+                               itertools.groupby(results, lambda x: x[0])]
 
         for i, (_, g) in enumerate(genomes):
             g.fitness = mean_trials_results[i][1]
@@ -231,7 +245,6 @@ def run_es(gens, env_fun, trials, max_steps, config, params, substrate, single_n
         cppns = [neat.nn.FeedForwardNetwork.create(g, config) for _, g in genomes]
         networks = [ESNetwork(substrate, cppn, params) for cppn in cppns]
         nets = [network.create_phenotype_network() for network in networks]
-
 
         # Prepare trial runner
         trial_runner = partial(
@@ -280,25 +293,33 @@ def run_es(gens, env_fun, trials, max_steps, config, params, substrate, single_n
             reporter.close()
             pop.reporters.remove(reporter)
 
-
     population_state = (pop.population, pop.species, pop.generation)
 
     return winner_one, stats_one, population_state
 
-def run(gens, env_fun, trials, version, single_network_env=True, agents_in_env=1, parallel_trials=False, output_dir=None, load_population_path=None):
+
+def run(gens, env_fun, trials, version, single_network_env=True, agents_in_env=1, parallel_trials=False,
+        output_dir=None, load_population_path=None):
     """
     Run the ant evolution task using the Gym environment
     Returns the winning genome and the statistics of the run.
     """
     winner, stats, population_state = run_es(gens, env_fun, trials, 200, CONFIG, params(
-        version), SUBSTRATE, single_network_env=single_network_env, agents_in_env=agents_in_env, parallel_trials=parallel_trials, output_dir=output_dir, load_population_path=load_population_path)
+        version), SUBSTRATE, single_network_env=single_network_env, agents_in_env=agents_in_env,
+                                             parallel_trials=parallel_trials, output_dir=output_dir,
+                                             load_population_path=load_population_path)
     print(f"es_hyperneat_ant_evolution_{VERSION_TEXT} done")
     return winner, stats, population_state
 
-def make_ant_env(ants_in_env=1):
+
+def make_ant_env(ants_in_env=1, seed=None):
+    env = ant_arena.AntColonyEnv(ants_in_env, 12, seed=seed)
+    # TODO: this is left for the separate use case of ESHyperneat in one env with multiple ants,
+    #  should be separated to a different file
     # env = ant_arena.AntColonyEnv(ants_in_env, 13, render_mode='human')
-    env = ant_arena.AntColonyEnv(ants_in_env, 12)
-    env.reset()
+    if seed is None:
+        env.reset()
+
     return env
 
 
@@ -306,18 +327,19 @@ if __name__ == "__main__":
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.INFO)
 
-    nr_gens = 100
+    nr_gens = 400
     # load_population_path = "./alg_runs/run_2025-06-30_18-14-26_no_pheromone_test_5_food_13_ants_no_obstacles_no_health_deacrease_gen1/es_hyperneat_ant_evolution_medium_population.pkl"
     load_population_path = None
     save_population = True
-    run_specificity = f"center_nest_no_pheromone_12_food_13_ants_no_obstacles_health_decreases_before_food_gen{nr_gens}"
+    run_specificity = f"center_nest_no_pheromone_12_food_5_ants_no_obstacles_health_decreases_before_food_gen{nr_gens}"
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     current_run_directory = f"alg_runs/run_{timestamp}_{run_specificity}"
 
     # Run! Only relevant to look at the winner.
-    winner, stats, population_state = run(nr_gens, make_ant_env, 2, VERSION, True, 5, False, os.path.join(current_run_directory, "plots"), load_population_path)
+    winner, stats, population_state = run(nr_gens, make_ant_env, 2, VERSION, True, 5, False,
+                                          os.path.join(current_run_directory, "plots"), load_population_path)
 
     os.makedirs(current_run_directory, exist_ok=True)
     # Save CPPN if wished reused and draw it + winner to file.
@@ -326,7 +348,8 @@ if __name__ == "__main__":
     NET = NETWORK.create_phenotype_network(
         filename=os.path.join(current_run_directory, f"es_hyperneat_ant_evolution_{VERSION_TEXT}_winner"))
     draw_net(CPPN, filename=os.path.join(current_run_directory, f"es_hyperneat_ant_evolution_{VERSION_TEXT}_cppn"))
-    with open(os.path.join(current_run_directory, f'es_hyperneat_ant_evolution_{VERSION_TEXT}_cppn.pkl'), 'wb') as output:
+    with open(os.path.join(current_run_directory, f'es_hyperneat_ant_evolution_{VERSION_TEXT}_cppn.pkl'),
+              'wb') as output:
         pickle.dump(CPPN, output, pickle.HIGHEST_PROTOCOL)
     if save_population:
         with open(os.path.join(current_run_directory, f'es_hyperneat_ant_evolution_{VERSION_TEXT}_population.pkl'),
