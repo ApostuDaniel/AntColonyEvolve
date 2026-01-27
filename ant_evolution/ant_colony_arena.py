@@ -767,12 +767,13 @@ class Ant():
                                                 MAX_DETECTABLE_PHEROMONE_CONCENTRATION)
 
     def set_action(self, action):
-        acceleration, turn_left, turn_right = action
+        speed, turn_left, turn_right = action
 
         self.desired_speed = self.speed
         # self.desired_turn_speed = 0
 
-        self.desired_speed += acceleration * AGENT_ACCELERATION
+        self.desired_speed = speed * AGENT_SPEED
+
         self.desired_speed = np.clip(self.desired_speed, -AGENT_SPEED, AGENT_SPEED)
 
         # If turn_left is negative, it means turn right
@@ -784,7 +785,7 @@ class Ant():
             self.turning_time_left = 0.0
             self.turning_time_right = 0.0
 
-        return [acceleration, turn_left, turn_right]
+        return [speed, turn_left, turn_right]
 
     def get_obs(self, food_sources=None, nest=None, pheromone_grid=None, cell_size=None, time=0, food_grid=None):
         """
@@ -1190,26 +1191,26 @@ class AntColonyEnv(ParallelEnv):
                 break
 
         # spawn ants in nest
-        max_ant_draw_radius = self.nest.radius
-        for agent in self.agents:
-            while True:
-                x, y = self.np_random.uniform(-max_ant_draw_radius, max_ant_draw_radius, size=2)
-                x, y = (int(self.nest.pos.x + x), int(self.nest.pos.y + y))
-                theta = self.np_random.uniform(0.0, 2 * math.pi)
-                if is_rectangle_in_circle(x, y, ANT_DIM.x, self.nest.pos, self.nest.radius):
-                    self.ants[agent] = Ant((x, y), theta)
-                    break
-
-        # spawn ants randomly
-        # max_ant_draw_radius = self.ant_arena.arena_radius * 0.80 - ANT_DIM.x * 2
+        # max_ant_draw_radius = self.nest.radius
         # for agent in self.agents:
         #     while True:
         #         x, y = self.np_random.uniform(-max_ant_draw_radius, max_ant_draw_radius, size=2)
-        #         x, y = (int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y))
+        #         x, y = (int(self.nest.pos.x + x), int(self.nest.pos.y + y))
         #         theta = self.np_random.uniform(0.0, 2 * math.pi)
-        #         if is_rectangle_in_circle(x, y, ANT_DIM.x, self.ant_arena.arena_center, self.ant_arena.arena_radius):
+        #         if is_rectangle_in_circle(x, y, ANT_DIM.x, self.nest.pos, self.nest.radius):
         #             self.ants[agent] = Ant((x, y), theta)
         #             break
+
+        # spawn ants randomly
+        max_ant_draw_radius = self.ant_arena.arena_radius * 0.80 - ANT_DIM.x * 2
+        for agent in self.agents:
+            while True:
+                x, y = self.np_random.uniform(-max_ant_draw_radius, max_ant_draw_radius, size=2)
+                x, y = (int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y))
+                theta = self.np_random.uniform(0.0, 2 * math.pi)
+                if is_rectangle_in_circle(x, y, ANT_DIM.x, self.ant_arena.arena_center, self.ant_arena.arena_radius):
+                    self.ants[agent] = Ant((x, y), theta)
+                    break
 
         # Initialize spatial grid
         self.food_grid = SpatialGrid(
