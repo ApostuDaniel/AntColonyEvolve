@@ -327,18 +327,19 @@ if __name__ == "__main__":
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.INFO)
 
-    nr_gens = 400
-    # load_population_path = "./alg_runs/run_2025-06-30_18-14-26_no_pheromone_test_5_food_13_ants_no_obstacles_no_health_deacrease_gen1/es_hyperneat_ant_evolution_medium_population.pkl"
+    nr_gens = 100
+    trials = 1
+    # load_population_path = "./alg_runs/run_2026-01-27_20-59-09_center_nest_no_pheromone_12_food_5_ants_no_obstacles_health_decreases_before_food_gen100/es_hyperneat_ant_evolution_medium_population.pkl"
     load_population_path = None
     save_population = True
-    run_specificity = f"center_nest_no_pheromone_12_food_5_ants_no_obstacles_health_decreases_before_food_gen{nr_gens}"
+    run_specificity = f"center_nest_no_pheromone_12_food_5_ants_no_obstacles_health_decreases_before_food_continuation_gen{nr_gens}"
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     current_run_directory = f"alg_runs/run_{timestamp}_{run_specificity}"
 
     # Run! Only relevant to look at the winner.
-    winner, stats, population_state = run(nr_gens, make_ant_env, 2, VERSION, True, 5, False,
+    winner, stats, population_state = run(nr_gens, make_ant_env, trials, VERSION, True, 5, False,
                                           os.path.join(current_run_directory, "plots"), load_population_path)
 
     os.makedirs(current_run_directory, exist_ok=True)
