@@ -269,7 +269,6 @@ class Ant():
             arena_center=(SCREEN_W / 2.0, SCREEN_H / 2.0),
             arena_radius=min(SCREEN_W, SCREEN_H) / 2.0 - min(SCREEN_W, SCREEN_H) * BOUNDARY_SCALE
     ):
-        self.desired_speed = 0
         self.pos = vec2d(*pos)
         self.speed = 0.0
         self.theta = theta if theta is not None else 0.0
@@ -719,7 +718,7 @@ class Ant():
                     quantity = initial_quantity
                 food_sources[food_idx] = (x, y, quantity)
 
-    def handle_health(self, turn_angle):
+    def handle_health(self, turn_left, turn_right):
         '''
         Remove from the agents food, then health at every timestep
         Refresh energy if ant in nest
@@ -768,16 +767,25 @@ class Ant():
                                                 MAX_DETECTABLE_PHEROMONE_CONCENTRATION)
 
     def set_action(self, action):
-        speed, turn_angle = action
+        speed, turn_left, turn_right = action
+
+        self.desired_speed = self.speed
+        # self.desired_turn_speed = 0
 
         self.desired_speed = speed * AGENT_SPEED
 
         self.desired_speed = np.clip(self.desired_speed, -AGENT_SPEED, AGENT_SPEED)
 
-        rotation = turn_angle * TURN_RATE
+        # If turn_left is negative, it means turn right
+        rotation = (turn_right - turn_left) * TURN_RATE
         self.theta += rotation
 
-        return [speed, turn_angle]
+        # If no turn, reset the turn timers
+        if turn_left == turn_right:
+            self.turning_time_left = 0.0
+            self.turning_time_right = 0.0
+
+        return [speed, turn_left, turn_right]
 
     def get_obs(self, food_sources=None, nest=None, pheromone_grid=None, cell_size=None, time=0, food_grid=None):
         """
@@ -823,12 +831,13 @@ class Ant():
             self.theta / (2 * math.pi),  # Normalized current orientation
             # time / (TIME_LIMIT * SIM_FPS),  # HEARTBEAT
             # self.traveled_distance / MAX_TRAVEL_PER_EPISODE,  # normalized travel distance
-            # self.current_energy / ANT_LIFE,  # normalized health
+            self.current_energy / ANT_LIFE,  # normalized health
             self.carried_food / ANT_CARRY_CAPACITY,  # normalize food carry
             int(ant_in_nest),  # 1 if ant is in nest, 0 otherwise
             int(self.current_food > 0 or (self.carried_food > 0 and ant_in_nest)),  # reward sensor
             int(self.wall_collision),  # penalty sensor
-            nest_distance / (self.arena_radius * 2),  # normalize to arena diameter, the maximum distance between ant and nest
+            # nest_distance / (self.arena_radius * 2),
+            # normalize to arena diameter, the maximum distance between ant and nest
             nest_angle / (2 * math.pi),  # normalized angle to nest
         ]
 
@@ -1011,14 +1020,14 @@ class AntColonyEnv(ParallelEnv):
             # 'theta_norm': Box(-1.0, 1.0),
             'speed': Box(-1., 1., (1,), np.float32),
             'theta': Box(0.0, 1., (1,), np.float32),
-            # "heartbeat": Box(0., 1., (1,), np.float32),
-            # "travel_distance": Box(0., 1., (1,), np.float32),
-            # "current_energy": Box(0., 1., (1,), np.float32),
+            "heartbeat": Box(0., 1., (1,), np.float32),
+            "travel_distance": Box(0., 1., (1,), np.float32),
+            "current_energy": Box(0., 1., (1,), np.float32),
             "carried_food": Box(0., 1., (1,), np.float32),
             "ant_in_nest": Box(0., 1., (1,), np.float32),
             "reward_sensor": Box(0., 1., (1,), np.float32),
             "penalty_sensor": Box(0., 1., (1,), np.float32),
-            "distance_to_nest": Box(0.0, 1., (1,), np.float32),
+            # "distance_to_nest": Box(0.0, 1., (1,), np.float32),
             "angle_to_nest": Box(0.0, 1., (1,), np.float32),
             # 'pheromone_sensors': Box(0.0, 1.0, (len(pheromone_ranges) * len(vision_segments) * PHEROMONE_TYPES,)),
             'vision_segments_wall_distances': Box(0.0, 1.0, (len(vision_segments), np.float32)),
@@ -1035,7 +1044,7 @@ class AntColonyEnv(ParallelEnv):
     # If your spaces change over time, remove this line (disable caching).
     @functools.lru_cache(maxsize=None)
     def action_space(self, agent):
-        return Box(-1.0, 1.0, (3,), dtype=np.float32)
+        return Box(-1.0, 1.0, (4,), dtype=np.float32)
 
     def seed(self, seed=None):
         return seeding.np_random(seed)
@@ -1255,12 +1264,12 @@ class AntColonyEnv(ParallelEnv):
         # don't respawn food for pheromone training
         self._respawn_food(SHOULD_FOOD_RESPAWN)
         for agent, action in actions.items():
-            self.ants[agent].place_pheromone(action[2], self.pheromone_grid, self.pheromone_intervals, self.cell_size)
+            self.ants[agent].place_pheromone(action[3], self.pheromone_grid, self.pheromone_intervals, self.cell_size)
 
-            self.ants[agent].set_action(action[:2])
+            self.ants[agent].set_action(action[:3])
             self.ants[agent].update()
 
-            self.ants[agent].handle_health(action[1])
+            self.ants[agent].handle_health(action[1], action[2])
             self.ants[agent].handle_food(self.food_sources, self.nest, agent, SHOULD_FOOD_DECREASE)
         self.t += 1
 
@@ -1873,7 +1882,7 @@ if __name__ == "__main__":
         observations, infos = env.reset()
 
         manual_mode = True
-        manual_action = [0.0, 0.0, 1.0]
+        manual_action = [0.0, 0.0, 0.0, 1.0]
 
         terminations = [False]
         truncations = [False]
@@ -1888,16 +1897,15 @@ if __name__ == "__main__":
                             done = True
                         if event.key == pygame.K_r:
                             env.reset()
-                        if event.key == pygame.K_UP:    manual_action[0:2] = [0.5, 0.0]
-                        if event.key == pygame.K_DOWN:  manual_action[0:2] = [-0.5, 0.0]
-                        if event.key == pygame.K_LEFT:  manual_action[1] = -0.15
-                        if event.key == pygame.K_RIGHT: manual_action[1] = 0.15
+                        if event.key == pygame.K_UP:    manual_action[0:3] = [0.2, 0.0, 0.0]
+                        if event.key == pygame.K_DOWN:  manual_action[0:3] = [-0.2, 0.0, 0.0]
+                        if event.key == pygame.K_LEFT:  manual_action[1], manual_action[2] = 0.15, 0.0
+                        if event.key == pygame.K_RIGHT: manual_action[1], manual_action[2] = 0.0, 0.15
                     elif event.type == pygame.KEYUP:
                         if event.key == pygame.K_UP:    manual_action[0] = 0.0
                         if event.key == pygame.K_DOWN:  manual_action[0] = 0.0
                         if event.key == pygame.K_LEFT:  manual_action[1] = 0.0
-                        if event.key == pygame.K_RIGHT:  manual_action[1] = 0.0
-
+                        if event.key == pygame.K_RIGHT:  manual_action[2] = 0.0
 
                 actions = {agent: manual_action for agent in env.agents}
             else:

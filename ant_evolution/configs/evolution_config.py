@@ -14,12 +14,12 @@ def get_input_coordinates():
         (-0.1, -1.0),  # theta
         # (0.1, -1.0),  # heartbeat
         # (0.2, -1.0),  # travel_distance
-        # (-0.2, -0.8),  # current_energy
+        (-0.2, -0.8),  # current_energy
         (0.2, -0.8),  # carried_food
         (0., -0.8),  # ant_in_nest
         (-0.2, -0.6),  # reward_sensor
         (0.2, -0.6),  # penalty_sensor
-        (0.2, -0.5),  # distance_to_nest
+        # (0.2, -0.5),  # distance_to_nest
         (-0.2, -0.5),  # angle_to_nest
     ]
 
@@ -48,7 +48,8 @@ def get_output_coordinates():
     outputs = \
         [
             (0., 0.7),  # acceleration
-            (0., 0.75),  # turn angle
+            (-1.0, 0.7),  # turn left
+            (1.0, 0.7),  # turn_right
             (0., 0.5)  # pheromone type
         ]
     return outputs
