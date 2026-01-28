@@ -185,3 +185,4 @@ fabric.properties
 .idea
 /dev_tests
 /ant_evolution/alg_runs/
+/ant_evolution/alg_runs_single_colony/

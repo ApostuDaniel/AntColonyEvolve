@@ -18,12 +18,14 @@ matplotlib.use('TkAgg')
 class PlotReporter(BaseReporter):
     """Uses `print` to output information and plots fitness statistics live."""
 
-    def __init__(self, show_species_detail, save_interval=None, plot_dir="../plots",
+    def __init__(self, show_species_detail, plot_save_frequency=10, plot_update_frequency=5, plot_dir="../plots",
                  plot_filename_prefix="fitness_plot"):
         self.log_file_path = os.path.join(plot_dir, "log.txt")
         os.makedirs(plot_dir, exist_ok=True)
         self.show_species_detail = show_species_detail
-        self.save_interval = save_interval
+        self.plot_save_frequency = plot_save_frequency
+        self.plot_update_frequency = plot_update_frequency
+        self.data_updates_from_last_save = 0
         self.plot_filename_prefix = plot_filename_prefix
         self.plot_dir = plot_dir
         self.generation = None
@@ -139,8 +141,6 @@ class PlotReporter(BaseReporter):
             output.append("Generation time: {0:.3f} sec".format(elapsed))
         self._write_info(output)
 
-
-
     def post_evaluate(self, config, population, species, best_genome):
         fitnesses = [c.fitness for c in itervalues(population)]
         fit_mean = mean(fitnesses)
@@ -167,8 +167,11 @@ class PlotReporter(BaseReporter):
                     self.species_best_fitness[sid] = []
                 self.species_best_fitness[sid].append((self.generation, s.fitness))
 
-        # Update plots
-        self.update_plots()
+        self.data_updates_from_last_save += 1
+
+        if (self.generation + 1) % self.plot_update_frequency == 0:
+            # Update plots
+            self.update_plots()
 
     def update_plots(self):
         """Update both population and species fitness plots."""
@@ -211,10 +214,9 @@ class PlotReporter(BaseReporter):
         self.ax2.autoscale_view()
 
         # Save plots periodically
-        if (self.save_interval and
-                self.generation > 0 and
-                (self.generation + 1) % self.save_interval == 0):
+        if self.data_updates_from_last_save >= self.plot_save_frequency:
             self.save_plots()
+            self.data_updates_from_last_save = 0
 
         # Redraw both canvases
         self.canvas1.draw()
