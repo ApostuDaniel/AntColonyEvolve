@@ -18,8 +18,7 @@ from gymnasium.spaces import Box, Tuple, Dict
 from gymnasium.utils import colorize, seeding
 from pettingzoo import ParallelEnv
 from pettingzoo.utils import parallel_to_aec, wrappers
-from scipy.signal import convolve2d
-from scipy.ndimage import convolve
+
 
 from configs.arena_config import *
 
@@ -421,15 +420,15 @@ class Ant():
                 food_quantity = food_density_areas[segment_idx][range_idx]["food"]
 
                 # Normalize food_quantity by max_food_size
-                fraction_detected = food_quantity / max_food_size if max_food_size > 0 else 0.0
+                fraction_detected = np.clip(food_quantity / ANT_CARRY_CAPACITY, 0, 1)
 
-                # Adjust fraction_detected so that food_quantity larger or equal to food size corresponds to an adjusted fraction of 1
-                adjusted_fraction = min(fraction_detected, 1.0)
+                # # Adjust fraction_detected so that food_quantity larger or equal to food size corresponds to an adjusted fraction of 1
+                # adjusted_fraction = min(fraction_detected, 1.0)
+                #
+                # # Apply exponential scaling
+                # scaled_value = max_value * (1 - math.exp(-k * adjusted_fraction))
 
-                # Apply exponential scaling
-                scaled_value = max_value * (1 - math.exp(-k * adjusted_fraction))
-
-                food_density_areas[segment_idx][range_idx]["food"] = scaled_value
+                food_density_areas[segment_idx][range_idx]["food"] = fraction_detected
 
         return food_density_areas
 
@@ -831,15 +830,19 @@ class Ant():
             self.theta / (2 * math.pi),  # Normalized current orientation
             # time / (TIME_LIMIT * SIM_FPS),  # HEARTBEAT
             # self.traveled_distance / MAX_TRAVEL_PER_EPISODE,  # normalized travel distance
-            self.current_energy / ANT_LIFE,  # normalized health
+            # self.current_energy / ANT_LIFE,  # normalized health
             self.carried_food / ANT_CARRY_CAPACITY,  # normalize food carry
             int(ant_in_nest),  # 1 if ant is in nest, 0 otherwise
             int(self.current_food > 0 or (self.carried_food > 0 and ant_in_nest)),  # reward sensor
             int(self.wall_collision),  # penalty sensor
-            # nest_distance / (self.arena_radius * 2),
-            # normalize to arena diameter, the maximum distance between ant and nest
+            nest_distance / (self.arena_radius * 2),  # normalize to arena diameter
             nest_angle / (2 * math.pi),  # normalized angle to nest
         ]
+
+        # Include the food density for each food detection area
+        for segment_idx in range(len(vision_segments)):
+            for range_idx in range(len(view_ranges)):
+                result.append(density_areas[segment_idx][range_idx]['food'])
 
         result.extend(self.pheromone_sensors.flatten())
 
@@ -850,11 +853,6 @@ class Ant():
         # # add normalized angle to nearest food per vision segment
         # result.extend([self.nearest_food_angles[i] for i in range(len(self.nearest_food_angles))])
 
-        # Include the food density for each food detection area
-
-        for segment_idx in range(len(vision_segments)):
-            for range_idx in range(len(view_ranges)):
-                result.append(density_areas[segment_idx][range_idx]['food'])
 
         return result
 
@@ -1027,15 +1025,14 @@ class AntColonyEnv(ParallelEnv):
             "ant_in_nest": Box(0., 1., (1,), np.float32),
             "reward_sensor": Box(0., 1., (1,), np.float32),
             "penalty_sensor": Box(0., 1., (1,), np.float32),
-            # "distance_to_nest": Box(0.0, 1., (1,), np.float32),
+            "distance_to_nest": Box(0.0, 1., (1,), np.float32),
             "angle_to_nest": Box(0.0, 1., (1,), np.float32),
-            # 'pheromone_sensors': Box(0.0, 1.0, (len(pheromone_ranges) * len(vision_segments) * PHEROMONE_TYPES,)),
+            'density_areas': Box(0.0, 1.0, (len(vision_segments) * len(view_ranges),)),
+            'pheromone_sensors': Box(0.0, 1.0, (len(pheromone_ranges) * len(vision_segments) * PHEROMONE_TYPES,)),
             'vision_segments_wall_distances': Box(0.0, 1.0, (len(vision_segments), np.float32)),
             # 'vision_segments_food_distances': Box(0.0, 1.0, (len(vision_segments), np.float32)),
             # 'vision_segments_food_angles': Box(-1.0, 1., (len(vision_segments),)),
-            'density_areas': Box(0.0, 1.0,(len(vision_segments) * len(view_ranges),)),
             # used when testing just the closest density sensors
-            # 'density_areas': Box(0.0, 1.0, (len(vision_segments),)),
         }
 
         return Dict(env_obs_spaces)

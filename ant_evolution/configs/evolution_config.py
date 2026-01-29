@@ -14,12 +14,12 @@ def get_input_coordinates():
         (-0.1, -1.0),  # theta
         # (0.1, -1.0),  # heartbeat
         # (0.2, -1.0),  # travel_distance
-        (-0.2, -0.8),  # current_energy
+        # (-0.2, -0.8),  # current_energy
         (0.2, -0.8),  # carried_food
         (0., -0.8),  # ant_in_nest
         (-0.2, -0.6),  # reward_sensor
         (0.2, -0.6),  # penalty_sensor
-        # (0.2, -0.5),  # distance_to_nest
+        (0.2, -0.5),  # distance_to_nest
         (-0.2, -0.5),  # angle_to_nest
     ]
 

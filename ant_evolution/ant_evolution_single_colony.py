@@ -203,10 +203,11 @@ if __name__ == "__main__":
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.INFO)
 
-    nr_gens = 400
+    nr_gens = 100
     trials = 2
     ants_per_env = CONFIG.pop_size
     food_per_env = 12
+    parallel_trials = False
 
     # load_population_path = "./alg_runs/run_2025-06-30_18-14-26_no_pheromone_test_5_food_13_ants_no_obstacles_no_health_deacrease_gen1/es_hyperneat_ant_evolution_medium_population.pkl"
     load_population_path = None
@@ -228,7 +229,7 @@ if __name__ == "__main__":
         substrate=SUBSTRATE,
         agents_in_env=ants_per_env,
         food_per_env=food_per_env,
-        parallel_trials=False,
+        parallel_trials=parallel_trials,
         output_dir=os.path.join(current_run_directory, "plots"),
         load_population_path=load_population_path
     )
