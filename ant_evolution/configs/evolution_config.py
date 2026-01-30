@@ -60,12 +60,12 @@ def params(version):
     ES-HyperNEAT specific parameters.
     """
     return {
-        "initial_depth": 0 if version == "S" else 1 if version == "M" else 2,
-        "max_depth": 1 if version == "S" else 2 if version == "M" else 3,
-        "variance_threshold": 0.04,
-        "band_threshold": 0.35,
-        "iteration_level": 2,
-        "division_threshold": 0.55,
-        "max_weight": 6.0,
-        "activation": "tanh"
+        "initial_depth": 1 if version == "S" else 2 if version == "M" else 3,
+        "max_depth": 2 if version == "S" else 3 if version == "M" else 4,
+        "variance_threshold": 0.03,
+        "band_threshold": 0.30,
+        "iteration_level": 3,
+        "division_threshold": 0.50,
+        "max_weight": 5.0,
+        "activation": "tanh",
     }

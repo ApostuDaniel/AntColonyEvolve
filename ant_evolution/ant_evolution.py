@@ -32,22 +32,6 @@ OUTPUT_COORDINATES = get_output_coordinates()
 SUBSTRATE = Substrate(INPUT_COORDINATES, OUTPUT_COORDINATES)
 
 
-def params(version):
-    """
-    ES-HyperNEAT specific parameters.
-    """
-    return {
-        "initial_depth": 0 if version == "S" else 1 if version == "M" else 2,
-        "max_depth": 1 if version == "S" else 2 if version == "M" else 3,
-        "variance_threshold": 0.04,
-        "band_threshold": 0.35,
-        "iteration_level": 2,
-        "division_threshold": 0.55,
-        "max_weight": 6.0,
-        "activation": "tanh"
-    }
-
-
 # Config for CPPN.
 CONFIG = neat.config.Config(neat.genome.DefaultGenome, neat.reproduction.DefaultReproduction,
                             neat.species.DefaultSpeciesSet, neat.stagnation.DefaultStagnation,
@@ -169,11 +153,14 @@ def run_es(gens, env_fun, trials, config, parameters, substrate, agents_in_env=1
         # sort and group results by genome index, should be 'trials' results with the same index
         # compute average for all trials
         results.sort(key=lambda x: x[0])
-        mean_trials_results = [(key, sum(num for _, num in value) / trials) for key, value in
+        # mean_trials_results = [(key, sum(num for _, num in value) / trials) for key, value in
+        #                        itertools.groupby(results, lambda x: x[0])]
+
+        min_trials_results = [(key, min(num for _, num in value)) for key, value in
                                itertools.groupby(results, lambda x: x[0])]
 
         for i, (_, g) in enumerate(genomes):
-            g.fitness = mean_trials_results[i][1]
+            g.fitness = min_trials_results[i][1]
 
     # Create population and train the network. Return network of winner.
     state = None
@@ -209,10 +196,10 @@ if __name__ == "__main__":
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.INFO)
 
-    nr_gens = 400
+    nr_gens = 200
     trials = 2
     ants_per_env = 5
-    food_per_env = 12
+    food_per_env = 30
 
     # load_population_path = "./alg_runs/run_2025-06-30_18-14-26_no_pheromone_test_5_food_13_ants_no_obstacles_no_health_deacrease_gen1/es_hyperneat_ant_evolution_medium_population.pkl"
     load_population_path = None

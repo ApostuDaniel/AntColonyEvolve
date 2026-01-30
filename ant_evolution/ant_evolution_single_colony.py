@@ -23,29 +23,9 @@ import itertools
 
 from configs.evolution_config import *
 
-# GLOBAL IN WORKER PROCESS
-worker_env = None
-worker_seed = 6
-
 INPUT_COORDINATES = get_input_coordinates()
 OUTPUT_COORDINATES = get_output_coordinates()
 SUBSTRATE = Substrate(INPUT_COORDINATES, OUTPUT_COORDINATES)
-
-
-def params(version):
-    """
-    ES-HyperNEAT specific parameters.
-    """
-    return {
-        "initial_depth": 0 if version == "S" else 1 if version == "M" else 2,
-        "max_depth": 1 if version == "S" else 2 if version == "M" else 3,
-        "variance_threshold": 0.04,
-        "band_threshold": 0.35,
-        "iteration_level": 2,
-        "division_threshold": 0.55,
-        "max_weight": 6.0,
-        "activation": "tanh"
-    }
 
 
 # Config for CPPN.
@@ -134,7 +114,8 @@ def run_es(gens, env_fun, trials, config, parameters, substrate, agents_in_env=1
                 fitnesses[i].append(total_rewards[i])
 
         for i, (_, g) in enumerate(genomes):
-            g.fitness = np.array(fitnesses[i]).mean()
+            min_trial_fitness = int(np.array(fitnesses[i]).min())
+            g.fitness = min_trial_fitness
 
     def eval_fitness_parallel_trials(genomes, config):
         # Build all networks once per generation
@@ -157,7 +138,7 @@ def run_es(gens, env_fun, trials, config, parameters, substrate, agents_in_env=1
 
         # Calculate average fitness
         fitness_matrix = np.array(results)
-        avg_fitness = fitness_matrix.mean(axis=0)
+        avg_fitness = int(fitness_matrix.min(axis=0))
 
         for i, (_, g) in enumerate(genomes):
             g.fitness = avg_fitness[i]
@@ -206,7 +187,7 @@ if __name__ == "__main__":
     nr_gens = 100
     trials = 2
     ants_per_env = CONFIG.pop_size
-    food_per_env = 12
+    food_per_env = 40
     parallel_trials = False
 
     # load_population_path = "./alg_runs/run_2025-06-30_18-14-26_no_pheromone_test_5_food_13_ants_no_obstacles_no_health_deacrease_gen1/es_hyperneat_ant_evolution_medium_population.pkl"

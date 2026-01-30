@@ -14,10 +14,10 @@ OUTPUT_COORDINATES = get_output_coordinates()
 SUBSTRATE = Substrate(INPUT_COORDINATES, OUTPUT_COORDINATES)
 
 if __name__ == "__main__":
-    env = ant_arena.AntColonyEnv(5, 12, render_mode='human')
+    env = ant_arena.AntColonyEnv(5, 30, render_mode='human')
     env.reset()
 
-    best_agent_file= "alg_runs/run_2026-01-29;12-49-17_rand_ants_no_pheromone_no_obstacles_no_health_ants-5_food-12_gen-400/es_hyperneat_ant_evolution_medium_cppn.pkl"
+    best_agent_file= "alg_runs/run_2026-01-30;16-52-45_rand_ants_no_pheromone_no_obstacles_no_health_ants-5_food-30_gen-200/es_hyperneat_ant_evolution_medium_cppn.pkl"
     CPPN = []
     with open(best_agent_file, 'rb') as file:
         CPPN = pickle.load(file)

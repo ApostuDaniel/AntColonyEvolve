@@ -19,7 +19,6 @@ from gymnasium.utils import colorize, seeding
 from pettingzoo import ParallelEnv
 from pettingzoo.utils import parallel_to_aec, wrappers
 
-
 from configs.arena_config import *
 
 logger = logging.getLogger(__name__)
@@ -228,7 +227,8 @@ class SpatialGrid:
     def remove_item(self, idx, x, y):
         key = self._get_cell_key(x, y)
         if key in self.grid:
-            self.grid[key].remove(idx)
+            if idx in self.grid[key]:
+                self.grid[key].remove(idx)
             if not self.grid[key]:  # Clean up empty cells
                 del self.grid[key]
 
@@ -437,6 +437,7 @@ class Ant():
             if distance_squared <= (vision_ranges[i] + food_size) ** 2:
                 return i
         return None
+
     def _get_fitting_vision_range_indices_vectorized(self, distance_squared, vision_ranges_squared, food_radii):
         """Vectorized version of vision range index calculation"""
         # For each food, find which range it fits in
@@ -505,7 +506,6 @@ class Ant():
 
         if len(food_ids) == 0:
             return detected_food, density_areas, food_in_eating_range
-
 
         food_array = np.array([food_sources[i] for i in food_ids])
         food_positions = food_array[:, :2]  # x, y
@@ -753,7 +753,8 @@ class Ant():
         # we want the interval for no pheromone placement to be close to the 0 value
         no_pheromone_interval = PHEROMONE_TYPES / 2
 
-        fitting_pheromone_mask = (pheromone_action >= pheromone_intervals[:, 0]) & (pheromone_action <= pheromone_intervals[:, 1])
+        fitting_pheromone_mask = (pheromone_action >= pheromone_intervals[:, 0]) & (
+                    pheromone_action <= pheromone_intervals[:, 1])
 
         idx = np.argmax(fitting_pheromone_mask)
 
@@ -762,8 +763,9 @@ class Ant():
         pheromone_to_place = idx if idx < no_pheromone_interval else idx - 1
 
         self.pheromone_deposit_type = pheromone_to_place
-        pheromone_grid[grid_y, grid_x, pheromone_to_place] = min(pheromone_grid[grid_y, grid_x, pheromone_to_place] + PHEROMONE_DEPOSIT,
-                                                MAX_DETECTABLE_PHEROMONE_CONCENTRATION)
+        pheromone_grid[grid_y, grid_x, pheromone_to_place] = min(
+            pheromone_grid[grid_y, grid_x, pheromone_to_place] + PHEROMONE_DEPOSIT,
+            MAX_DETECTABLE_PHEROMONE_CONCENTRATION)
 
     def set_action(self, action):
         speed, turn_left, turn_right = action
@@ -852,7 +854,6 @@ class Ant():
         # result.extend([self.nearest_food_distances[i] for i in range(len(self.nearest_food_distances))])
         # # add normalized angle to nearest food per vision segment
         # result.extend([self.nearest_food_angles[i] for i in range(len(self.nearest_food_angles))])
-
 
         return result
 
@@ -1096,7 +1097,7 @@ class AntColonyEnv(ParallelEnv):
         def get_rand_food_params():
             while True:
                 x, y = self.np_random.uniform(-max_food_draw_radius, max_food_draw_radius, size=2)
-                quantity = int(self.np_random.uniform(MAX_FOOD_QUANTITY - 10, MAX_FOOD_QUANTITY))
+                quantity = np.round(self.np_random.uniform(1, MAX_FOOD_QUANTITY))
                 # return int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y), quantity
                 x, y = int(self.nest.pos.x + x), int(self.nest.pos.y + y)
                 if (compute_distance(x, y, self.nest.pos.x, self.nest.pos.y) > min_food_draw_radius and
@@ -1114,7 +1115,19 @@ class AntColonyEnv(ParallelEnv):
                                                     self.ant_arena.arena_radius, True)
             return food_x, food_y, quantity
 
-        if self.food_sources is None or len(self.food_sources) == 0:
+        def remove_empty_food_sources():
+            removed_source_indexes = []
+            for i in range(len(self.food_sources)):
+                x, y, quantity = self.food_sources[i]
+                if quantity <= 0:
+                    # Remove consumed food from grid
+                    self.food_grid.remove_item(i, x, y)
+                    removed_source_indexes.append(i)
+
+            return removed_source_indexes
+
+        # initial spawn
+        if self.food_sources is None or len(self.food_sources) <= 0:
             self.food_sources = []
             for i in range(self.nr_of_food):
                 x, y, quantity = get_rand_food_params()
@@ -1124,15 +1137,14 @@ class AntColonyEnv(ParallelEnv):
                 # Add to food grid
                 self.food_grid.add_item(i, x, y)
         elif respawn_eaten_food:
-            for i in range(len(self.food_sources)):
-                x, y, quantity = self.food_sources[i]
-                if quantity <= 0:
-                    # Remove consumed food from grid
-                    self.food_grid.remove_item(i, x, y)
-                    x, y, quantity = get_rand_food_params()
-                    self.food_sources[i] = (x, y, quantity)
-                    # Add to food grid
-                    self.food_grid.add_item(i, x, y)
+            removed_indexes = remove_empty_food_sources()
+            for i in removed_indexes:
+                x, y, quantity = get_rand_food_params()
+                self.food_sources[i] = (x, y, quantity)
+                # Add to food grid
+                self.food_grid.add_item(i, x, y)
+        else:
+            remove_empty_food_sources()
 
     def _apply_arena_mask(self):
         """Zero out pheromones outside the circular arena"""
@@ -1506,7 +1518,8 @@ class AntColonyEnv(ParallelEnv):
                 valid_ranges = range_indices[mask]
 
                 # Check pheromone presence with MIN_DETECTABLE_PHEROMONE_CONCENTRATION
-                has_pheromones = np.any(self.pheromone_grid[valid_i, valid_j] >= MIN_DETECTABLE_PHEROMONE_CONCENTRATION, axis=-1)
+                has_pheromones = np.any(self.pheromone_grid[valid_i, valid_j] >= MIN_DETECTABLE_PHEROMONE_CONCENTRATION,
+                                        axis=-1)
 
                 # Determine segment bins
                 segment_boundaries = ant._get_segment_boundaries()
@@ -1547,7 +1560,6 @@ class AntColonyEnv(ParallelEnv):
                 # Draw all rectangles at once
                 for rect, color in zip(rects, colors):
                     pygame.draw.rect(canvas, color, rect)
-
 
         draw_grid_lines()
         if render_ant_grid_vision:
@@ -1615,7 +1627,7 @@ class AntColonyEnv(ParallelEnv):
         # Draw food positions and size
         if self.food_sources is not None:
             for (x, y, quantity) in self.food_sources:
-                # scale down the food_size
+                # scale the food_size
                 # food_size is the diameter
                 food_size = int(max(2, quantity * FOOD_SIZE_SCALING))
                 pygame.draw.circle(
@@ -1872,7 +1884,7 @@ class AntColonyEnv(ParallelEnv):
 
 
 if __name__ == "__main__":
-    env = AntColonyEnv(render_mode='human', nr_of_ants=1, nr_of_food=12)
+    env = AntColonyEnv(render_mode='human', nr_of_ants=1, nr_of_food=30)
 
     while True:
         total_reward = 0
@@ -1894,8 +1906,8 @@ if __name__ == "__main__":
                             done = True
                         if event.key == pygame.K_r:
                             env.reset()
-                        if event.key == pygame.K_UP:    manual_action[0:3] = [0.2, 0.0, 0.0]
-                        if event.key == pygame.K_DOWN:  manual_action[0:3] = [-0.2, 0.0, 0.0]
+                        if event.key == pygame.K_UP:    manual_action[0:3] = [0.4, 0.0, 0.0]
+                        if event.key == pygame.K_DOWN:  manual_action[0:3] = [-0.4, 0.0, 0.0]
                         if event.key == pygame.K_LEFT:  manual_action[1], manual_action[2] = 0.15, 0.0
                         if event.key == pygame.K_RIGHT: manual_action[1], manual_action[2] = 0.0, 0.15
                     elif event.type == pygame.KEYUP:
