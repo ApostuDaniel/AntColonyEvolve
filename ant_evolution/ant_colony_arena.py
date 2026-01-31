@@ -227,8 +227,7 @@ class SpatialGrid:
     def remove_item(self, idx, x, y):
         key = self._get_cell_key(x, y)
         if key in self.grid:
-            if idx in self.grid[key]:
-                self.grid[key].remove(idx)
+            self.grid[key].remove(idx)
             if not self.grid[key]:  # Clean up empty cells
                 del self.grid[key]
 
@@ -291,7 +290,7 @@ class Ant():
         self.food_in_eating_range = []
 
         self.carried_food = 0
-        self.current_food = 0
+        self.collected_food = 0
         self.current_energy = ANT_LIFE
         self.in_nest = False
 
@@ -474,12 +473,12 @@ class Ant():
             segment_boundaries.append((start, stop, idx))
         return segment_boundaries
 
-    def _detect_nearby_food(self, food_sources, food_grid: SpatialGrid):
+    def _detect_nearby_food(self, food_sources: dict, food_grid: SpatialGrid):
         """
         Detects food sources within vision range and categorizes them into vision segments.
 
         Parameters:
-        - food_sources (list of tuples): The (x, y, quantity) positions of food sources and their quantity.
+        - food_sources (dict of tuples): The (x, y, quantity) positions of food sources and their quantity.
 
         Returns:
         - dict: Maps segment names to lists of food positions within that segment.
@@ -694,24 +693,25 @@ class Ant():
             self.pos = vec2d(desired_pos[0], desired_pos[1])
 
     def handle_food(self, food_sources, nest, agent, decrease_food_source=True):
-        self.current_food = 0
+        self.collected_food = 0
         if self.in_nest and self.carried_food > 0:
             nest.register_food(self.carried_food, agent)
             self.carried_food = 0
         else:
             for food_idx in self.food_in_eating_range:
-                if self.carried_food >= ANT_CARRY_CAPACITY: break
+                if self.carried_food >= ANT_CARRY_CAPACITY:
+                    break
                 x, y, quantity = food_sources[food_idx]
                 initial_quantity = quantity
                 # if self.current_energy < ANT_LIFE:
                 #     extracted = min(quantity, ANT_LIFE - self.current_energy)
                 #     self.current_energy += extracted
-                #     self.current_food += extracted
+                #     self.collected_food += extracted
                 #     quantity -= extracted
-                if quantity > 0 and self.carried_food < ANT_CARRY_CAPACITY:
+                if quantity > 0:
                     extracted = min(quantity, ANT_CARRY_CAPACITY - self.carried_food)
                     self.carried_food += extracted
-                    self.current_food += extracted
+                    self.collected_food += extracted
                     quantity -= extracted
                 if not decrease_food_source:
                     quantity = initial_quantity
@@ -723,9 +723,9 @@ class Ant():
         Refresh energy if ant in nest
         :return:
         '''
-        if self.in_nest and self.current_energy < ANT_LIFE and self.carried_food > 0:
-            self.current_energy = ANT_LIFE
-            return
+        # if self.in_nest and self.current_energy < ANT_LIFE and self.carried_food > 0:
+        #     self.current_energy = ANT_LIFE
+        #     return
 
         # health_lost = speed_penalty_square(self.speed) + rotation_penalty_square(turn_right, turn_left) + int(
         #     self.wall_collision)  # decrease extra if colliding with wall
@@ -738,8 +738,10 @@ class Ant():
         #     self.current_energy -= (health_lost - self.carried_food)
         #     self.carried_food = 0
 
-        if self.current_energy >= health_lost:
-            self.current_energy -= health_lost
+        self.current_energy -= health_lost
+
+        # if self.current_energy >= health_lost:
+        #     self.current_energy -= health_lost
         # else:
         #     self.carried_food -= health_lost
         #     if self.carried_food < 0:  # subtract the remaining health
@@ -835,7 +837,7 @@ class Ant():
             # self.current_energy / ANT_LIFE,  # normalized health
             self.carried_food / ANT_CARRY_CAPACITY,  # normalize food carry
             int(ant_in_nest),  # 1 if ant is in nest, 0 otherwise
-            int(self.current_food > 0 or (self.carried_food > 0 and ant_in_nest)),  # reward sensor
+            int(self.collected_food > 0 or (self.carried_food > 0 and ant_in_nest)),  # reward sensor
             int(self.wall_collision),  # penalty sensor
             nest_distance / (self.arena_radius * 2),  # normalize to arena diameter
             nest_angle / (2 * math.pi),  # normalized angle to nest
@@ -935,6 +937,7 @@ class AntColonyEnv(ParallelEnv):
         self.nr_of_food = nr_of_food
 
         self.food_sources = None
+        self.food_counter = 0
         self.viewer = None
         self.state = None
         self.noise = 0
@@ -1068,7 +1071,7 @@ class AntColonyEnv(ParallelEnv):
 
         # turn_left, turn_right = actions[1:3]
         nest_reward = self.nest.food_register.get(agent, 0)
-        reward = nest_reward * 3 + ant.current_food
+        reward = nest_reward * 3 + ant.collected_food
         ant.total_reward += reward
 
         return reward
@@ -1079,7 +1082,7 @@ class AntColonyEnv(ParallelEnv):
 
     def _destroy(self):
         self.ants = {}
-        self.food_sources = []
+        self.food_sources = None
         self.other_ants_angles = []
 
         self.viewer = None
@@ -1116,35 +1119,39 @@ class AntColonyEnv(ParallelEnv):
             return food_x, food_y, quantity
 
         def remove_empty_food_sources():
-            removed_source_indexes = []
-            for i in range(len(self.food_sources)):
+            removed_food_keys = []
+            for i in self.food_sources:
                 x, y, quantity = self.food_sources[i]
                 if quantity <= 0:
                     # Remove consumed food from grid
                     self.food_grid.remove_item(i, x, y)
-                    removed_source_indexes.append(i)
+                    removed_food_keys.append(i)
+            for key in removed_food_keys:
+                del self.food_sources[key]
 
-            return removed_source_indexes
+            return removed_food_keys
+
+        def add_new_food(x, y, quantity):
+            self.food_sources[self.food_counter] = (x, y, quantity)
+            self.food_grid.add_item(self.food_counter, x, y)
+            self.food_counter += 1
 
         # initial spawn
-        if self.food_sources is None or len(self.food_sources) <= 0:
-            self.food_sources = []
-            for i in range(self.nr_of_food):
+        if (self.food_sources is None or len(self.food_sources) <= 0) and self.food_counter == 0:
+            self.food_sources = {}
+            for _ in range(self.nr_of_food):
                 x, y, quantity = get_rand_food_params()
                 if self.nr_of_food == 1:
                     x, y, quantity = place_food_mirroring_nest()
-                self.food_sources.append((x, y, quantity))
-                # Add to food grid
-                self.food_grid.add_item(i, x, y)
+                add_new_food(x, y, quantity)
         elif respawn_eaten_food:
             removed_indexes = remove_empty_food_sources()
-            for i in removed_indexes:
+            for _ in removed_indexes:
                 x, y, quantity = get_rand_food_params()
-                self.food_sources[i] = (x, y, quantity)
-                # Add to food grid
-                self.food_grid.add_item(i, x, y)
+                add_new_food(x, y, quantity)
         else:
             remove_empty_food_sources()
+
 
     def _apply_arena_mask(self):
         """Zero out pheromones outside the circular arena"""
@@ -1176,6 +1183,8 @@ class AntColonyEnv(ParallelEnv):
         self.actions = []
 
         self.time_offset = 0.0
+        self.food_counter = 0
+
 
         nr_of_agents = options.get('nr_of_agents', len(self.possible_agents)) if options else len(self.possible_agents)
         self.agents = copy.deepcopy(self.possible_agents[:nr_of_agents])
@@ -1271,15 +1280,17 @@ class AntColonyEnv(ParallelEnv):
             self._render_frame
 
         # don't respawn food for pheromone training
-        self._respawn_food(SHOULD_FOOD_RESPAWN)
         for agent, action in actions.items():
+            self.ants[agent].handle_health(action[1], action[2])
+            self.ants[agent].handle_food(self.food_sources, self.nest, agent, SHOULD_FOOD_DECREASE)
+
             self.ants[agent].place_pheromone(action[3], self.pheromone_grid, self.pheromone_intervals, self.cell_size)
 
             self.ants[agent].set_action(action[:3])
             self.ants[agent].update()
 
-            self.ants[agent].handle_health(action[1], action[2])
-            self.ants[agent].handle_food(self.food_sources, self.nest, agent, SHOULD_FOOD_DECREASE)
+        self._respawn_food(SHOULD_FOOD_RESPAWN)
+
         self.t += 1
 
         # terminate ants that have run out of energy
@@ -1626,7 +1637,7 @@ class AntColonyEnv(ParallelEnv):
     def draw_food(self, canvas: pygame.Surface, font: pygame.font):
         # Draw food positions and size
         if self.food_sources is not None:
-            for (x, y, quantity) in self.food_sources:
+            for (x, y, quantity) in self.food_sources.values():
                 # scale the food_size
                 # food_size is the diameter
                 food_size = int(max(2, quantity * FOOD_SIZE_SCALING))
@@ -1826,7 +1837,7 @@ class AntColonyEnv(ParallelEnv):
         # Fill the canvas with purple as the outer background
         canvas = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
         canvas.fill((200, 190, 210))  # Outer purple background
-        font = pygame.font.SysFont('Arial', 9)
+        font = pygame.font.SysFont('Arial', 15)
 
         self.draw_arena(canvas)
 
