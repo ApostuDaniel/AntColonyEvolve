@@ -49,7 +49,7 @@ class PlotReporter(BaseReporter):
         # Create the main application window
         self.root = tk.Tk()
         self.root.title("ESHyperneat Plots")
-        self.root.geometry("1200x600")
+        self.root.geometry("1600x800")
 
         # Create frames for each plot
         frame1 = tk.Frame(self.root)

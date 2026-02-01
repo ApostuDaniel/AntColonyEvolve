@@ -419,7 +419,7 @@ class Ant():
                 food_quantity = food_density_areas[segment_idx][range_idx]["food"]
 
                 # Normalize food_quantity by max_food_size
-                fraction_detected = np.clip(food_quantity / ANT_CARRY_CAPACITY, 0, 1)
+                fraction_detected = np.clip(food_quantity / max(1, ANT_CARRY_CAPACITY - self.carried_food), 0, 1)
 
                 # # Adjust fraction_detected so that food_quantity larger or equal to food size corresponds to an adjusted fraction of 1
                 # adjusted_fraction = min(fraction_detected, 1.0)
@@ -1022,9 +1022,9 @@ class AntColonyEnv(ParallelEnv):
             # 'theta_norm': Box(-1.0, 1.0),
             'speed': Box(-1., 1., (1,), np.float32),
             'theta': Box(0.0, 1., (1,), np.float32),
-            "heartbeat": Box(0., 1., (1,), np.float32),
-            "travel_distance": Box(0., 1., (1,), np.float32),
-            "current_energy": Box(0., 1., (1,), np.float32),
+            # "heartbeat": Box(0., 1., (1,), np.float32),
+            # "travel_distance": Box(0., 1., (1,), np.float32),
+            # "current_energy": Box(0., 1., (1,), np.float32),
             "carried_food": Box(0., 1., (1,), np.float32),
             "ant_in_nest": Box(0., 1., (1,), np.float32),
             "reward_sensor": Box(0., 1., (1,), np.float32),
@@ -1071,7 +1071,7 @@ class AntColonyEnv(ParallelEnv):
 
         # turn_left, turn_right = actions[1:3]
         nest_reward = self.nest.food_register.get(agent, 0)
-        reward = nest_reward * 3 + ant.collected_food
+        reward = nest_reward + ant.collected_food
         ant.total_reward += reward
 
         return reward

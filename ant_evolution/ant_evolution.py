@@ -196,7 +196,7 @@ if __name__ == "__main__":
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.INFO)
 
-    nr_gens = 200
+    nr_gens = 50
     trials = 2
     ants_per_env = 5
     food_per_env = 30
