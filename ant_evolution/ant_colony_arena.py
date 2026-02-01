@@ -288,6 +288,7 @@ class Ant():
         self.density_areas = {}
         # idx for food_sources that the ant can handle_food
         self.food_in_eating_range = []
+        self.nest_detection_zones = []
 
         self.carried_food = 0
         self.collected_food = 0
@@ -460,10 +461,18 @@ class Ant():
         dx = nest.pos.x - self.pos.x
         dy = nest.pos.y - self.pos.y
         angle_to_nest = math.atan2(dy, dx) % (2 * math.pi)
-        distance = math.sqrt(dx ** 2 + dy ** 2)
+        relative_angle = (angle_to_nest - self.theta + math.pi) % (2 * math.pi) - math.pi
+
+        nest_segment_idx = _assign_segments_vectorized(np.array([relative_angle]), nest_detection_segments)[0]
+        nest_detection_zones = [0] * len(nest_detection_segments)
+        if nest_segment_idx >= 0:
+            nest_detection_zones[nest_segment_idx] = 1
+
+        # distance = math.sqrt(dx ** 2 + dy ** 2)
+
         ant_in_nest = nest.is_ant_in_nest(self)
 
-        return distance, angle_to_nest, ant_in_nest
+        return nest_detection_zones, ant_in_nest
 
     def _get_segment_boundaries(self):
         segment_boundaries = []
@@ -817,10 +826,11 @@ class Ant():
             self.pheromone_sensors /= MAX_PHEROMONE_CONCENTRATION_PER_ZONE
 
         if nest is not None:
-            (nest_distance, nest_angle, ant_in_nest) = self._detect_nest(nest)
+            nest_detection_zones, ant_in_nest = self._detect_nest(nest)
         else:
-            nest_distance, nest_angle, ant_in_nest = 1., -1., False
+            nest_detection_zones, ant_in_nest = [0] * len(nest_detection_segments), False
 
+        self.nest_detection_zones = nest_detection_zones
         self.in_nest = ant_in_nest
 
         # Get the agent's position in polar coordinates
@@ -839,8 +849,9 @@ class Ant():
             int(ant_in_nest),  # 1 if ant is in nest, 0 otherwise
             int(self.collected_food > 0 or (self.carried_food > 0 and ant_in_nest)),  # reward sensor
             int(self.wall_collision),  # penalty sensor
-            nest_distance / (self.arena_radius * 2),  # normalize to arena diameter
-            nest_angle / (2 * math.pi),  # normalized angle to nest
+            # nest_distance / (self.arena_radius * 2),  # normalize to arena diameter
+            # nest_angle / (2 * math.pi),  # normalized angle to nest
+            *self.nest_detection_zones  # 1 shows whether nest is to the front, right back or left, 0 all else
         ]
 
         # Include the food density for each food detection area
@@ -1031,6 +1042,7 @@ class AntColonyEnv(ParallelEnv):
             "penalty_sensor": Box(0., 1., (1,), np.float32),
             "distance_to_nest": Box(0.0, 1., (1,), np.float32),
             "angle_to_nest": Box(0.0, 1., (1,), np.float32),
+            "nest_detection_zones": Box(0.0, 1., (4,), np.float32),
             'density_areas': Box(0.0, 1.0, (len(vision_segments) * len(view_ranges),)),
             'pheromone_sensors': Box(0.0, 1.0, (len(pheromone_ranges) * len(vision_segments) * PHEROMONE_TYPES,)),
             'vision_segments_wall_distances': Box(0.0, 1.0, (len(vision_segments), np.float32)),
@@ -1753,18 +1765,34 @@ class AntColonyEnv(ParallelEnv):
 
             if DRAW_NEST_SENSORS:
                 # Draw distance indicator to nest
-                distance, angle_to_nest, ant_in_nest = ant._detect_nest(self.nest)
-                nest_x = int(ant.pos.x + math.cos(angle_to_nest) * distance)
-                nest_y = int(ant.pos.y + math.sin(angle_to_nest) * distance)
+                # distance, angle_to_nest, ant_in_nest = ant._detect_nest(self.nest)
+                segment_idx = np.argmax(ant.nest_detection_zones)
+                start_angle, stop_angle = nest_detection_segments[segment_idx][0:2]
+                start_angle = (ant.theta + start_angle) % (2 * math.pi)
+                stop_angle = (ant.theta + stop_angle) % (2 * math.pi)
+                # nest_x = int(ant.pos.x + math.cos(angle_to_nest) * distance)
+                # nest_y = int(ant.pos.y + math.sin(angle_to_nest) * distance)
                 # Check also ant_in_nest var: black line to nest if ant outside of nest, green otherwise
-                indicator_color = (0, 0, 0) if not ant_in_nest else (0, 255, 0)
-                pygame.draw.line(
+                indicator_color = (0, 0, 0) if not ant.in_nest else (0, 255, 0)
+                range = MAX_VISION_RANGE / 2
+                pygame.draw.arc(
                     canvas,
                     indicator_color,
-                    (int(ant.pos.x), int(ant.pos.y)),
-                    (nest_x, nest_y),
-                    1
+                    (int(ant.pos.x - range), int(ant.pos.y - range), range * 2,
+                     range * 2),
+                    # To align to pygame where angles increase clockwise, we needed to inverse the values
+                    -stop_angle,
+                    -start_angle,
+                    2
                 )
+
+                # pygame.draw.line(
+                #     canvas,
+                #     indicator_color,
+                #     (int(ant.pos.x), int(ant.pos.y)),
+                #     (nest_x, nest_y),
+                #     1
+                # )
 
             # Draw agent last; to ensure visibility.
             pygame.draw.rect(

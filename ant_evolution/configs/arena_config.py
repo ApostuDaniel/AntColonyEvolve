@@ -62,12 +62,19 @@ HIGHLIGHT_BEST_ANT = False
 
 # 3 vision segments
 vision_segments = [
-    # Bright red, intense and strong
+    # red
     ((-math.pi / 2, -math.pi / 6), (255, 0, 0), 'forward_l1'),
-    # Bright yellow, cheerful and vibrant
+    # yellow
     ((-math.pi / 6, math.pi / 6), (255, 255, 0), 'forward'),
-    # Sky blue, cool and calm
+    # blue
     ((math.pi / 6, math.pi / 2), (0, 0, 255), 'forward_r1'),
+]
+
+nest_detection_segments = [
+    (-3 * math.pi / 4, -math.pi / 4, 0),  # left
+    (3 * math.pi / 4, -3 * math.pi / 4, 1),  # back
+    (-math.pi / 4, math.pi / 4, 2),  # front
+    (math.pi / 4, 3 * math.pi / 4, 3),  # right
 ]
 
 PHEROMONE_DETECTION_MAX_RANGE = MIN_VISION_RANGE
