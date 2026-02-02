@@ -1,7 +1,7 @@
 from .arena_config import vision_segments, view_ranges, pheromone_ranges, PHEROMONE_TYPES, nest_detection_segments
 
 # S, M or L; Small, Medium or Large (logic implemented as "Not 'S' or 'M' then Large").
-VERSION = "S"
+VERSION = "M"
 VERSION_TEXT = "small" if VERSION == "S" else "medium" if VERSION == "M" else "large"
 
 
