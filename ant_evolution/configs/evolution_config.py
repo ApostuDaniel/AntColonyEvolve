@@ -1,7 +1,7 @@
 from .arena_config import vision_segments, view_ranges, pheromone_ranges, PHEROMONE_TYPES, nest_detection_segments
 
 # S, M or L; Small, Medium or Large (logic implemented as "Not 'S' or 'M' then Large").
-VERSION = "M"
+VERSION = "S"
 VERSION_TEXT = "small" if VERSION == "S" else "medium" if VERSION == "M" else "large"
 
 
@@ -84,8 +84,8 @@ def params(version):
             "band_threshold": 0.4,  # Higher = more aggressive pruning
             "iteration_level": 1,  # Lower for simpler networks
             "division_threshold": 0.6,  # Higher = less subdivision
-            "max_weight": 4.0,  # Lower to prevent extreme activations
-            "activation": "sigmoid"  # Bounded output
+            "max_weight": 2.5,  # Lower to prevent extreme activations
+            "activation": "tanh"  # Bounded output (can use softsign with max_weight 4.0, added it in neat)
         }
 
     elif version == "M":  # Medium - RECOMMENDED START HERE
@@ -96,7 +96,7 @@ def params(version):
             "band_threshold": 0.35,  # Standard
             "iteration_level": 1,  # ⬇️ Reduced from 2
             "division_threshold": 0.5,  # ⬇️ Reduced from 0.55
-            "max_weight": 5.0,  # ⬇️ Reduced from 6.0
+            "max_weight": 2.5,  # ⬇️ Reduced from 6.0
             "activation": "tanh"  # Good for motor control
         }
 
@@ -108,6 +108,6 @@ def params(version):
             "band_threshold": 0.3,  # Standard from research
             "iteration_level": 2,  # Higher for finer resolution
             "division_threshold": 0.5,
-            "max_weight": 5.0,
+            "max_weight": 2.5,
             "activation": "tanh"
         }
