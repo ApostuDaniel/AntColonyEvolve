@@ -12,6 +12,7 @@ import ant_colony_arena as ant_arena
 import neat
 
 from utils.neat_plot_reporter import PlotReporter
+from utils.best_genome_reporter import BestGenomeReporter
 
 from pureples.shared.visualize import draw_net
 from pureples.shared.substrate import Substrate
@@ -113,7 +114,8 @@ def _run_one_env(index, phenotype_net, nr_activations, trial=0):
 
 
 def run_es(gens, env_fun, trials, config, parameters, substrate, agents_in_env=1,
-           food_per_env=1, output_statistics=True, output_dir=None, load_population_path=None):
+           food_per_env=1, output_statistics=True, output_dir=None, winner_dir=None, winner_file_name=None,
+           load_population_path=None):
     """
     Generic OpenAI Gym runner for ES-HyperNEAT.
     """
@@ -172,9 +174,12 @@ def run_es(gens, env_fun, trials, config, parameters, substrate, agents_in_env=1
             state = (old_pop_population, old_pop_species, 0)
 
     stats_reporter = neat.statistics.StatisticsReporter()
+    best_genome_reporter = BestGenomeReporter(save_dir=winner_dir, save_file_name=winner_file_name, config=config,
+                                              substrate=substrate, parameters=parameters)
 
     pop = init_pop(state, config, output_statistics, output_dir)
     pop.add_reporter(stats_reporter)
+    pop.add_reporter(best_genome_reporter)
 
     winner_one = pop.run(eval_fitness_parallel_environments, gens)
 
@@ -197,7 +202,7 @@ if __name__ == "__main__":
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.INFO)
 
-    nr_gens = 2
+    nr_gens = 10
     trials = 2
     ants_per_env = 5
     food_per_env = 30
@@ -211,6 +216,9 @@ if __name__ == "__main__":
     timestamp = datetime.now().strftime("%Y-%m-%d;%H-%M-%S")
 
     current_run_directory = f"alg_runs/run_{timestamp}_{run_specificity}"
+    winner_file_name = f"es_hyperneat_ant_evolution_{VERSION_TEXT}"
+
+    os.makedirs(current_run_directory, exist_ok=True)
 
     # Run! Only relevant to look at the winner.
     winner, stats, population_state = run_es(
@@ -223,30 +231,31 @@ if __name__ == "__main__":
         agents_in_env=ants_per_env,
         food_per_env=food_per_env,
         output_dir=os.path.join(current_run_directory, "plots"),
+        winner_dir=os.path.join(current_run_directory, "winner"),
+        winner_file_name=winner_file_name,
         load_population_path=load_population_path
     )
 
     print(f"es_hyperneat_ant_evolution_{VERSION_TEXT} done")
 
-    os.makedirs(current_run_directory, exist_ok=True)
     # Save CPPN if wished to be reused and draw it + winner to file.
     CPPN = neat.nn.FeedForwardNetwork.create(winner, CONFIG)
-    NETWORK = ESNetwork(SUBSTRATE, CPPN, params(VERSION))
-    NET = NETWORK.create_phenotype_network(
-        filename=os.path.join(current_run_directory, f"es_hyperneat_ant_evolution_{VERSION_TEXT}_winner")
-    )
-
-    draw_net(
-        CPPN,
-        filename=os.path.join(current_run_directory, f"es_hyperneat_ant_evolution_{VERSION_TEXT}_cppn")
-    )
-
-    with open(os.path.join(current_run_directory, f'es_hyperneat_ant_evolution_{VERSION_TEXT}_cppn.pkl'), 'wb') as output:
-        pickle.dump(CPPN, output, pickle.HIGHEST_PROTOCOL)
-
-    if save_population:
-        with open(os.path.join(current_run_directory, f'es_hyperneat_ant_evolution_{VERSION_TEXT}_population.pkl'), 'wb') as output:
-            pickle.dump(population_state, output, pickle.HIGHEST_PROTOCOL)
+    # NETWORK = ESNetwork(SUBSTRATE, CPPN, params(VERSION))
+    # NET = NETWORK.create_phenotype_network(
+    #     filename=os.path.join(current_run_directory, f"es_hyperneat_ant_evolution_{VERSION_TEXT}_winner")
+    # )
+    #
+    # draw_net(
+    #     CPPN,
+    #     filename=os.path.join(current_run_directory, f"es_hyperneat_ant_evolution_{VERSION_TEXT}_cppn")
+    # )
+    #
+    # with open(os.path.join(current_run_directory, f'es_hyperneat_ant_evolution_{VERSION_TEXT}_cppn.pkl'), 'wb') as output:
+    #     pickle.dump(CPPN, output, pickle.HIGHEST_PROTOCOL)
+    #
+    # if save_population:
+    #     with open(os.path.join(current_run_directory, f'es_hyperneat_ant_evolution_{VERSION_TEXT}_population.pkl'), 'wb') as output:
+    #         pickle.dump(population_state, output, pickle.HIGHEST_PROTOCOL)
 
     # after learning has ended, display the best individuals in pygame
     display_env = make_ant_env(ants_per_env, food_per_env)

@@ -16,7 +16,7 @@ matplotlib.use('TkAgg')
 
 
 class PlotReporter(BaseReporter):
-    """Uses `print` to output information and plots fitness statistics live."""
+    """Uses `print` to output information and plots fitness statistics live. Saves best genome"""
 
     def __init__(self, show_species_detail, plot_save_frequency=10, plot_update_frequency=5, plot_dir="../plots",
                  plot_filename_prefix="fitness_plot"):
@@ -49,7 +49,7 @@ class PlotReporter(BaseReporter):
         # Create the main application window
         self.root = tk.Tk()
         self.root.title("ESHyperneat Plots")
-        self.root.geometry("1600x800")
+        self.root.geometry("1700x850")
 
         # Create frames for each plot
         frame1 = tk.Frame(self.root)
@@ -58,7 +58,7 @@ class PlotReporter(BaseReporter):
         frame2.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
         # Create figures and embed them in Tkinter frames
-        self.fig = plt.Figure(figsize=(6, 4), dpi=100)
+        self.fig = plt.Figure(figsize=(8, 5), dpi=110)
         self.ax = self.fig.add_subplot(111)
         self.ax.set_title('Population Fitness over Generations')
         self.ax.set_xlabel('Generation')
@@ -70,7 +70,7 @@ class PlotReporter(BaseReporter):
         self.ax.legend(loc='best')
         self.fig.tight_layout()
 
-        self.fig2 = plt.Figure(figsize=(6, 4), dpi=100)
+        self.fig2 = plt.Figure(figsize=(8, 5), dpi=110)
         self.ax2 = self.fig2.add_subplot(111)
         self.ax2.set_title('Species Best Fitness over Generations')
         self.ax2.set_xlabel('Generation')
@@ -141,6 +141,7 @@ class PlotReporter(BaseReporter):
             output.append("Generation time: {0:.3f} sec".format(elapsed))
         self._write_info(output)
 
+
     def post_evaluate(self, config, population, species, best_genome):
         fitnesses = [c.fitness for c in itervalues(population)]
         fit_mean = mean(fitnesses)
@@ -172,6 +173,7 @@ class PlotReporter(BaseReporter):
         if (self.generation + 1) % self.plot_update_frequency == 0:
             # Update plots
             self.update_plots()
+
 
     def update_plots(self):
         """Update both population and species fitness plots."""
