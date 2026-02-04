@@ -22,6 +22,7 @@ from functools import partial
 import itertools
 
 from configs.evolution_config import *
+from ant_behaviour_display import display_learning_continuously
 
 # GLOBAL IN WORKER PROCESS
 worker_env = None
@@ -196,7 +197,7 @@ if __name__ == "__main__":
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.INFO)
 
-    nr_gens = 800
+    nr_gens = 2
     trials = 2
     ants_per_env = 5
     food_per_env = 30
@@ -246,3 +247,10 @@ if __name__ == "__main__":
     if save_population:
         with open(os.path.join(current_run_directory, f'es_hyperneat_ant_evolution_{VERSION_TEXT}_population.pkl'), 'wb') as output:
             pickle.dump(population_state, output, pickle.HIGHEST_PROTOCOL)
+
+    # after learning has ended, display the best individuals in pygame
+    display_env = make_ant_env(ants_per_env, food_per_env)
+    display_env.render_mode = "human"
+    display_env.reset()
+
+    display_learning_continuously(display_env, CPPN)
