@@ -205,7 +205,7 @@ if __name__ == "__main__":
     load_population_path = None
 
     save_population = True
-    run_specificity = f"{params(VERSION)['activation']}_rand_ants_no_pheromone_no_obstacles_no_health_ants-{ants_per_env}_food-{food_per_env}_gen-{nr_gens}"
+    run_specificity = f"{params(VERSION)['activation']}_nest_angle_rand_ants_no_pheromone_no_obstacles_no_health_ants-{ants_per_env}_food-{food_per_env}_gen-{nr_gens}"
 
     timestamp = datetime.now().strftime("%Y-%m-%d;%H-%M-%S")
 
