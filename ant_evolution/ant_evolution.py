@@ -156,14 +156,14 @@ def run_es(gens, env_fun, trials, config, parameters, substrate, agents_in_env=1
         # sort and group results by genome index, should be 'trials' results with the same index
         # compute average for all trials
         results.sort(key=lambda x: x[0])
-        # mean_trials_results = [(key, sum(num for _, num in value) / trials) for key, value in
+        mean_trials_results = [(key, sum(num for _, num in value) / trials) for key, value in
+                               itertools.groupby(results, lambda x: x[0])]
+        #
+        # min_trials_results = [(key, min(num for _, num in value)) for key, value in
         #                        itertools.groupby(results, lambda x: x[0])]
 
-        min_trials_results = [(key, min(num for _, num in value)) for key, value in
-                               itertools.groupby(results, lambda x: x[0])]
-
         for i, (_, g) in enumerate(genomes):
-            g.fitness = min_trials_results[i][1]
+            g.fitness = mean_trials_results[i][1]
 
     # Create population and train the network. Return network of winner.
     state = None
@@ -202,8 +202,8 @@ if __name__ == "__main__":
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.INFO)
 
-    nr_gens = 600
-    trials = 3
+    nr_gens = 50
+    trials = 1
     ants_per_env = 5
     food_per_env = 70
 

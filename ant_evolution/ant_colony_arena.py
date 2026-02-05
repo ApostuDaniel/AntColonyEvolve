@@ -1120,8 +1120,7 @@ class AntColonyEnv(ParallelEnv):
         self.clock = None
 
     def _respawn_food(self, respawn_eaten_food=True):
-        max_food_per_source = 1
-        max_food_draw_radius = (self.ant_arena.arena_radius * 2) * 0.5 - (max_food_per_source * FOOD_SIZE_SCALING) * 2
+        max_food_draw_radius = (self.ant_arena.arena_radius * 2) * 0.5 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING) * 2
         min_food_draw_radius = (self.ant_arena.arena_radius * 2) * 0.2
 
         def generate_clustered_food():
@@ -1137,7 +1136,8 @@ class AntColonyEnv(ParallelEnv):
                 # Power law: P(x) ~ x^(-alpha)
                 cluster_size = int(self.np_random.pareto(alpha) * 3) + 1  # +1 to avoid zero
                 cluster_size = min(cluster_size, remaining_food)
-                if 0 < cluster_size <= MAX_FOOD_QUANTITY:
+                if (MIN_FOOD_PER_CLUSTER <= cluster_size <= MAX_FOOD_PER_CLUSTER) or \
+                        (remaining_food < MIN_FOOD_PER_CLUSTER):
                     clusters.append(cluster_size)
                     remaining_food -= cluster_size
 
@@ -2036,8 +2036,8 @@ if __name__ == "__main__":
                             done = True
                         if event.key == pygame.K_r:
                             env.reset()
-                        if event.key == pygame.K_UP:    manual_action[0:3] = [0.4, 0.0, 0.0]
-                        if event.key == pygame.K_DOWN:  manual_action[0:3] = [-0.4, 0.0, 0.0]
+                        if event.key == pygame.K_UP:    manual_action[0:3] = [0.99, 0.0, 0.0]
+                        if event.key == pygame.K_DOWN:  manual_action[0:3] = [-0.99, 0.0, 0.0]
                         if event.key == pygame.K_LEFT:  manual_action[1], manual_action[2] = 0.15, 0.0
                         if event.key == pygame.K_RIGHT: manual_action[1], manual_action[2] = 0.0, 0.15
                     elif event.type == pygame.KEYUP:
