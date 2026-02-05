@@ -1120,43 +1120,98 @@ class AntColonyEnv(ParallelEnv):
         self.clock = None
 
     def _respawn_food(self, respawn_eaten_food=True):
-        max_food_draw_radius = (self.ant_arena.arena_radius * 2) * 0.5 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING) * 2
+        max_food_per_source = 1
+        max_food_draw_radius = (self.ant_arena.arena_radius * 2) * 0.5 - (max_food_per_source * FOOD_SIZE_SCALING) * 2
         min_food_draw_radius = (self.ant_arena.arena_radius * 2) * 0.2
 
-        # max_food_draw_radius = self.nest.radius * 8 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING) * 2
+        def generate_clustered_food():
+            """Generate food clusters using power law distribution."""
+            total_food = self.nr_of_food
+            clusters = []
 
-        def get_rand_food_params():
+            # Generate cluster sizes using power law (alpha ~2-3 gives reasonable distribution)
+            alpha = 2.5
+            remaining_food = total_food
+
+            while remaining_food > 0:
+                # Power law: P(x) ~ x^(-alpha)
+                cluster_size = int(self.np_random.pareto(alpha) * 3) + 1  # +1 to avoid zero
+                cluster_size = min(cluster_size, remaining_food)
+                if 0 < cluster_size <= MAX_FOOD_QUANTITY:
+                    clusters.append(cluster_size)
+                    remaining_food -= cluster_size
+
+            return clusters
+
+        def place_cluster(cluster_size):
+            """Place a cluster of food pellets in a circular arrangement."""
+            # Get random cluster center
             while True:
-                x, y = self.np_random.uniform(-max_food_draw_radius, max_food_draw_radius, size=2)
-                quantity = np.round(self.np_random.uniform(1, MAX_FOOD_QUANTITY))
-                # return int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y), quantity
-                x, y = int(self.nest.pos.x + x), int(self.nest.pos.y + y)
-                if (compute_distance(x, y, self.nest.pos.x, self.nest.pos.y) > min_food_draw_radius and
-                        is_rectangle_in_circle(x, y, quantity * FOOD_SIZE_SCALING / 2, self.ant_arena.arena_center,
-                                               self.ant_arena.arena_radius)):
-                    return x, y, quantity
+                angle = self.np_random.uniform(0, 2 * np.pi)
+                radius = self.np_random.uniform(min_food_draw_radius, max_food_draw_radius)
+                center_x = int(self.ant_arena.arena_center.x + radius * np.cos(angle))
+                center_y = int(self.ant_arena.arena_center.y + radius * np.sin(angle))
 
-        def place_food_mirroring_nest():
-            """Returns food parameters with a food location that mirrors the position of the nest over arena origin."""
-            nest_r, nest_theta = to_polar_coordinates(self.nest.pos, self.ant_arena.arena_center,
-                                                      self.ant_arena.arena_radius)
-            food_theta = (nest_theta + 1) - 2 if nest_theta + 1 > 1 else nest_theta + 1
-            quantity = int(self.np_random.uniform(MAX_FOOD_QUANTITY - 10, MAX_FOOD_QUANTITY))
-            food_x, food_y = from_polar_coordinates((nest_r, food_theta), self.ant_arena.arena_center,
-                                                    self.ant_arena.arena_radius, True)
-            return food_x, food_y, quantity
+                # Check if cluster center is in arena
+                if compute_distance(center_x, center_y, self.nest.pos.x, self.nest.pos.y) > min_food_draw_radius:
+                    break
+
+            pellets = []
+            pellet_radius = FOOD_SIZE_SCALING / 2  # Radius of a single food pellet
+
+            if cluster_size == 1:
+                # Single pellet
+                pellets.append((center_x, center_y, 1))
+            else:
+                # Arrange pellets in concentric circles to maximize packing
+                pellets_placed = 0
+                ring = 0
+
+                while pellets_placed < cluster_size:
+                    if ring == 0:
+                        # Center pellet
+                        pellets.append((center_x, center_y, 1))
+                        pellets_placed += 1
+                    else:
+                        # Calculate pellets that fit in this ring
+                        ring_radius = ring * pellet_radius * 2  # Each ring is 2 pellet radii apart
+                        circumference = 2 * np.pi * ring_radius
+                        pellets_in_ring = min(
+                            int(circumference / (pellet_radius * 2)),  # Max that fit
+                            cluster_size - pellets_placed  # Remaining needed
+                        )
+
+                        for i in range(pellets_in_ring):
+                            angle = (2 * np.pi * i) / pellets_in_ring
+                            px = int(center_x + ring_radius * np.cos(angle))
+                            py = int(center_y + ring_radius * np.sin(angle))
+
+                            # Check if pellet is within arena
+                            if is_rectangle_in_circle(px, py, pellet_radius,
+                                                      self.ant_arena.arena_center,
+                                                      self.ant_arena.arena_radius):
+                                pellets.append((px, py, 1))
+                                pellets_placed += 1
+
+                            if pellets_placed >= cluster_size:
+                                break
+
+                    ring += 1
+                    # Safety check to prevent infinite loop
+                    if ring > 10:
+                        break
+
+            return pellets
 
         def remove_empty_food_sources():
             removed_food_keys = []
             for i in self.food_sources:
                 x, y, quantity = self.food_sources[i]
                 if quantity <= 0:
-                    # Remove consumed food from grid
                     self.food_grid.remove_item(i, x, y)
                     removed_food_keys.append(i)
             for key in removed_food_keys:
                 del self.food_sources[key]
-
             return removed_food_keys
 
         def add_new_food(x, y, quantity):
@@ -1164,19 +1219,28 @@ class AntColonyEnv(ParallelEnv):
             self.food_grid.add_item(self.food_counter, x, y)
             self.food_counter += 1
 
-        # initial spawn
+        # Initial spawn
         if (self.food_sources is None or len(self.food_sources) <= 0) and self.food_counter == 0:
             self.food_sources = {}
-            for _ in range(self.nr_of_food):
-                x, y, quantity = get_rand_food_params()
-                if self.nr_of_food == 1:
-                    x, y, quantity = place_food_mirroring_nest()
-                add_new_food(x, y, quantity)
+            clusters = generate_clustered_food()
+
+            for cluster_size in clusters:
+                pellets = place_cluster(cluster_size)
+                for x, y, quantity in pellets:
+                    add_new_food(x, y, quantity)
+
         elif respawn_eaten_food:
             removed_indexes = remove_empty_food_sources()
-            for _ in removed_indexes:
-                x, y, quantity = get_rand_food_params()
-                add_new_food(x, y, quantity)
+
+            # Respawn removed pellets as new clusters
+            if len(removed_indexes) > 0:
+                # Create new clusters with the removed pellet count
+                clusters = generate_clustered_food()  # This generates full 30, you may want to adjust
+                # Or simply respawn each as single pellet:
+                for _ in removed_indexes:
+                    pellets = place_cluster(1)  # Single pellet
+                    for x, y, quantity in pellets:
+                        add_new_food(x, y, quantity)
         else:
             remove_empty_food_sources()
 
@@ -1223,9 +1287,9 @@ class AntColonyEnv(ParallelEnv):
             self.np_random, _ = self.seed(seed=seed)
 
         # spawn nest
-        # max_nest_draw_radius = self.ant_arena.arena_radius * 0.20 - NEST_RADIUS * 2
+        max_nest_draw_radius = self.ant_arena.arena_radius * 0.60 - NEST_RADIUS * 2
         # draw in center
-        max_nest_draw_radius = self.ant_arena.arena_radius * 0.1
+        # max_nest_draw_radius = self.ant_arena.arena_radius * 0.1
         min_nest_draw_radius = self.ant_arena.arena_radius * 0.0
         while True:
             x, y = self.np_random.uniform(-max_nest_draw_radius, max_nest_draw_radius, size=2)
@@ -1237,26 +1301,26 @@ class AntColonyEnv(ParallelEnv):
                 break
 
         # spawn ants in nest
-        # max_ant_draw_radius = self.nest.radius
-        # for agent in self.agents:
-        #     while True:
-        #         x, y = self.np_random.uniform(-max_ant_draw_radius, max_ant_draw_radius, size=2)
-        #         x, y = (int(self.nest.pos.x + x), int(self.nest.pos.y + y))
-        #         theta = self.np_random.uniform(0.0, 2 * math.pi)
-        #         if is_rectangle_in_circle(x, y, ANT_DIM.x, self.nest.pos, self.nest.radius):
-        #             self.ants[agent] = Ant((x, y), theta)
-        #             break
-
-        # spawn ants randomly
-        max_ant_draw_radius = self.ant_arena.arena_radius * 0.80 - ANT_DIM.x * 2
+        max_ant_draw_radius = self.nest.radius * 2
         for agent in self.agents:
             while True:
                 x, y = self.np_random.uniform(-max_ant_draw_radius, max_ant_draw_radius, size=2)
-                x, y = (int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y))
+                x, y = (int(self.nest.pos.x + x), int(self.nest.pos.y + y))
                 theta = self.np_random.uniform(0.0, 2 * math.pi)
                 if is_rectangle_in_circle(x, y, ANT_DIM.x, self.ant_arena.arena_center, self.ant_arena.arena_radius):
                     self.ants[agent] = Ant((x, y), theta)
                     break
+
+        # # spawn ants randomly
+        # max_ant_draw_radius = self.ant_arena.arena_radius * 0.80 - ANT_DIM.x * 2
+        # for agent in self.agents:
+        #     while True:
+        #         x, y = self.np_random.uniform(-max_ant_draw_radius, max_ant_draw_radius, size=2)
+        #         x, y = (int(self.ant_arena.arena_center.x + x), int(self.ant_arena.arena_center.y + y))
+        #         theta = self.np_random.uniform(0.0, 2 * math.pi)
+        #         if is_rectangle_in_circle(x, y, ANT_DIM.x, self.ant_arena.arena_center, self.ant_arena.arena_radius):
+        #             self.ants[agent] = Ant((x, y), theta)
+        #             break
 
         # Initialize spatial grid
         self.food_grid = SpatialGrid(
@@ -1950,7 +2014,7 @@ class AntColonyEnv(ParallelEnv):
 
 
 if __name__ == "__main__":
-    env = AntColonyEnv(render_mode='human', nr_of_ants=1, nr_of_food=30)
+    env = AntColonyEnv(render_mode='human', nr_of_ants=1, nr_of_food=70)
 
     while True:
         total_reward = 0

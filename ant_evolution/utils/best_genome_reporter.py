@@ -1,6 +1,7 @@
 import os
 import pickle
 from pathlib import Path
+from copy import deepcopy
 
 import neat
 from neat.reporting import BaseReporter
@@ -33,52 +34,56 @@ class BestGenomeReporter(BaseReporter):
         pass
 
     def post_evaluate(self, config, population, species, best_genome):
-        if self.best_genome is None or best_genome.fitness > self.best_genome.fitness:
-            self.best_genome = best_genome
+        # recency bias
+        if self.best_genome is None or best_genome.fitness >= self.best_genome.fitness:
+            # self.best_genome still lives on in the population, if it receives a lower score in the next generation, it
+            # it would be removed, but we want to keep the best score across generations
+            self.best_genome = deepcopy(best_genome)
             self.best_population = population
             self.best_generation = self.generation
             self.best_genome_changed = True
 
-        if (self.generation + 1) % self.save_frequency == 0 and self.best_genome_changed:
-            self.save_best_genome()
-            self.best_genome_changed = False
+        if (self.generation + 1) % self.save_frequency == 0:
+            self.save_best_genome(os.path.join(self.save_dir, "last_generation"), best_genome, population, self.generation)
+            if self.best_genome_changed:
+                self.save_best_genome(os.path.join(self.save_dir, "winner"), self.best_genome, self.best_population, self.best_generation)
+                self.best_genome_changed = False
 
     def found_solution(self, config, generation, best):
-        self.best_genome = best
-        self.best_generation = self.generation
-        self.save_best_genome()
+        # self.best_genome = best
+        # self.best_generation = self.generation
+        # self.save_best_genome()
+        pass
 
-    def save_best_genome(self):
+    def save_best_genome(self, save_dir, genome, population, generation):
 
-        os.makedirs(self.save_dir, exist_ok=True)
+        os.makedirs(save_dir, exist_ok=True)
 
         # Remove previous files
-        for file in Path(self.save_dir).iterdir():
+        for file in Path(save_dir).iterdir():
             if file.is_file():
                 os.remove(file)
 
         # Save CPPN if wished to be reused and draw it + winner to file.
-        CPPN = neat.nn.FeedForwardNetwork.create(self.best_genome, self.config)
+        CPPN = neat.nn.FeedForwardNetwork.create(genome, self.config)
         NETWORK = ESNetwork(self.substrate, CPPN, self.evolution_parameters)
         NET = NETWORK.create_phenotype_network(
-            filename=os.path.join(self.save_dir, f"{self.save_file_name}_winner")
+            filename=os.path.join(save_dir, f"{self.save_file_name}_winner")
         )
 
         draw_net(
             CPPN,
-            filename=os.path.join(self.save_dir, f"{self.save_file_name}_cppn")
+            filename=os.path.join(save_dir, f"{self.save_file_name}_cppn")
         )
 
-        with open(os.path.join(self.save_dir, f"{self.save_file_name}_cppn.pkl"),
+        with open(os.path.join(save_dir, f"{self.save_file_name}_cppn.pkl"),
                   'wb') as output:
             pickle.dump(CPPN, output, pickle.HIGHEST_PROTOCOL)
 
-        # esnures function does not crush if called from found_solution, since last population is not returned
-        if self.best_genome_changed and self.best_population is not None:
-            with open(os.path.join(self.save_dir, f"{self.save_file_name}_population.pkl"),
-                      'wb') as output:
-                pickle.dump(self.best_population, output, pickle.HIGHEST_PROTOCOL)
+        with open(os.path.join(save_dir, f"{self.save_file_name}_population.pkl"),
+                  'wb') as output:
+            pickle.dump(population, output, pickle.HIGHEST_PROTOCOL)
 
-        with open(os.path.join(self.save_dir, f"{self.save_file_name}_info.txt"),
+        with open(os.path.join(save_dir, f"{self.save_file_name}_info.txt"),
                   'w') as output:
-            output.write(f"Best generation: {self.best_generation}, best fitness: {self.best_genome.fitness}")
+            output.write(f"Best generation: {generation}, best fitness: {genome.fitness}")
