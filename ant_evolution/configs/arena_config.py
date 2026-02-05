@@ -14,7 +14,7 @@ arena_sizes = namedtuple('arena_sizes', ['arena_center', 'arena_radius'])
 
 # Global parameters for agent control
 TIMESTEP = 1. / SIM_FPS  # Not sure if this will be necessary, given the fixed FPS?
-TIME_LIMIT = SIM_FPS * 10  # 10 seconds
+TIME_LIMIT = SIM_FPS * 12  # 10 seconds
 
 ANT_DIM = vec2d(6, 6)
 AGENT_SPEED = 10.0  # Maximum ant speed observed in data (pixels)
@@ -46,6 +46,7 @@ DRAW_PHEROMONES = True
 DRAW_PHEROMONE_VISION = True
 DRAW_FOOD_GRID = False
 HIGHLIGHT_BEST_ANT = False
+DRAW_WALL_DISTANCE = True
 
 # 5 vision segments
 # vision_segments = [
@@ -77,6 +78,12 @@ nest_detection_segments = [
     (3 * math.pi / 4, -3 * math.pi / 4, 1),  # back
     (-math.pi / 4, math.pi / 4, 2),  # front
     (math.pi / 4, 3 * math.pi / 4, 3),  # right
+]
+
+wall_detection_rays = [
+    -math.pi / 2,  # left
+    0,  # front
+    math.pi / 2,  # right
 ]
 
 PHEROMONE_DETECTION_MAX_RANGE = MIN_VISION_RANGE

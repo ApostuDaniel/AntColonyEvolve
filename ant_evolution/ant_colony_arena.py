@@ -356,22 +356,15 @@ class Ant():
 
         return scaled_distance
 
-    def _detect_distances(self, detected_food):
+    def _detect_food_distances(self, detected_food):
         """
-        Detect distances to walls and ants.
-        Returns distances as positive values for ants and negative values for walls, prioritizing the closest object.
+        Detect distances and angles to food.
         """
         for idx, (angle_range, _, _) in enumerate(vision_segments):
-            # Calculate central angle once
-            central_angle = ((self.theta + sum(angle_range) / 2) % (2 * math.pi))
 
             # Initialize scaled distances
             food_distance_scaled = 1.0  # outside of vision range
             food_angle = -1  # outside allowed angle range(0, 2 * math.pi), to show nothing is detected
-
-            # Get wall distance
-            # compute_distance_to_wall already returns the distance scaled
-            wall_distance_scaled = self._compute_distance_to_wall(central_angle)
 
             # Get ant distance
             food_in_segment = detected_food.get(idx, [])
@@ -388,10 +381,23 @@ class Ant():
                 if raw_food_distance is not None and raw_food_distance <= self.vision_range:
                     food_distance_scaled = raw_food_distance / self.vision_range
 
-            # Store all scores at once
-            self.wall_distances[idx] = wall_distance_scaled
             self.nearest_food_distances[idx] = food_distance_scaled
             self.nearest_food_angles[idx] = food_angle
+
+    def _detect_wall_distances(self):
+        """
+        Detect distances to walls.
+        """
+        for idx, angle in enumerate(wall_detection_rays):
+            # Calculate central angle once
+            central_angle = ((self.theta + angle) % (2 * math.pi))
+
+            # Get wall distance
+            # compute_distance_to_wall already returns the distance scaled
+            wall_distance_scaled = self._compute_distance_to_wall(central_angle)
+
+            # Store all scores at once
+            self.wall_distances[idx] = wall_distance_scaled
 
     def _normalize_food_density(self, food_density_areas: dict, max_food_size: int, max_value: float = 1.0):
         """
@@ -830,7 +836,8 @@ class Ant():
             detected_food, density_areas, food_in_eating_range = self._detect_nearby_food(food_sources, food_grid)
             self.food_in_eating_range = food_in_eating_range
             self.density_areas = self._normalize_food_density(density_areas, MAX_FOOD_QUANTITY)
-            self._detect_distances(detected_food)
+            self._detect_food_distances(detected_food)
+            self._detect_wall_distances()
 
         # Add pheromone sensor values (flattened: 3 segments * 3 types = 9 values)
         if pheromone_grid is not None and cell_size is not None:
@@ -850,7 +857,7 @@ class Ant():
         self.in_nest = ant_in_nest
 
         # Get the agent's position in polar coordinates
-        r_norm, theta_norm = self.get_polar_position()
+        # r_norm, theta_norm = self.get_polar_position()
 
         # Initialize the observation vector with basic state information
         result = [
@@ -1766,7 +1773,8 @@ class AntColonyEnv(ParallelEnv):
                     (
                         int(ant.pos.x + np.cos(start_angle) * MAX_VISION_RANGE),
                         int(ant.pos.y + np.sin(start_angle) * MAX_VISION_RANGE)
-                    )
+                    ),
+                    2
                 )
 
                 pygame.draw.line(
@@ -1776,7 +1784,8 @@ class AntColonyEnv(ParallelEnv):
                     (
                         int(ant.pos.x + np.cos(stop_angle) * MAX_VISION_RANGE),
                         int(ant.pos.y + np.sin(stop_angle) * MAX_VISION_RANGE)
-                    )
+                    ),
+                    2
                 )
 
                 if draw_food_density:
@@ -1802,7 +1811,8 @@ class AntColonyEnv(ParallelEnv):
                              view_range * 2),
                             # To align to pygame where angles increase clockwise, we needed to inverse the values
                             -stop_angle,
-                            -start_angle
+                            -start_angle,
+                            2
                         )
 
                 if DRAW_PHEROMONE_VISION:
@@ -1816,6 +1826,24 @@ class AntColonyEnv(ParallelEnv):
                             # To align to pygame where angles increase clockwise, we needed to inverse the values
                             -stop_angle,
                             -start_angle
+                        )
+
+                if DRAW_WALL_DISTANCE:
+                    # Draw wall distance indicators
+                    for idx, angle in enumerate(wall_detection_rays):
+                        central_angle = (ant.theta + angle) % (2 * math.pi)
+                        distance = ant.wall_distances[idx] * MAX_VISION_RANGE
+
+                        end_x = int(ant.pos.x + math.cos(central_angle) * distance)
+                        end_y = int(ant.pos.y + math.sin(central_angle) * distance)
+
+                        # Draw a line from the ant to wall, or max vision range
+                        pygame.draw.line(
+                            canvas,
+                            (0, 255, 0),  # Purple color for wall distance
+                            (int(ant.pos.x), int(ant.pos.y)),
+                            (end_x, end_y),
+                            1
                         )
 
     def draw_ants(self, canvas: pygame.Surface, font: pygame.font, draw_ant_vision=True):
@@ -1976,27 +2004,6 @@ class AntColonyEnv(ParallelEnv):
 
         if DRAW_ANT_VISION:
             self.draw_ant_vision(canvas, font, DRAW_FOOD_DENSITY)
-
-        # Draw wall distance indicators
-        # for segment_idx, distance in self.ant.wall_distances.items():
-        #     if distance is not None:
-        #         # Calculate the central angle of the segment
-        #         angle_range, _ = vision_segments[segment_idx]
-        #         central_angle = (angle_range[0] + angle_range[1]) / 2
-        #         central_angle = (self.ant.theta + central_angle) % (2 * math.pi)
-
-        #         # Calculate end point based on wall distance
-        #         end_x = int(self.ant.pos.x + math.cos(central_angle) * distance)
-        #         end_y = int(self.ant.pos.y + math.sin(central_angle) * distance)
-
-        #         # Draw a line from the ant to the wall
-        #         pygame.draw.line(
-        #             canvas,
-        #             (255, 0, 0),  # Red color for wall distance
-        #             (int(self.ant.pos.x), int(self.ant.pos.y)),
-        #             (end_x, end_y),
-        #             1
-        #         )
 
         self.draw_ants(canvas, font, DRAW_ANT_VISION)
 
