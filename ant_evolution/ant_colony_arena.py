@@ -2021,11 +2021,12 @@ class AntColonyEnv(ParallelEnv):
 
 
 if __name__ == "__main__":
-    env = AntColonyEnv(render_mode='human', nr_of_ants=1, nr_of_food=70)
+    seed = 17
+    env = AntColonyEnv(render_mode='human', nr_of_ants=1, nr_of_food=70, seed=seed)
 
     while True:
         total_reward = 0
-        observations, infos = env.reset()
+        observations, infos = env.reset(seed=seed)
 
         manual_mode = True
         manual_action = [0.0, 0.0, 0.0, 1.0]

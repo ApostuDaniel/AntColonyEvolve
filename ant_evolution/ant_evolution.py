@@ -3,6 +3,7 @@ import logging
 import os
 import pickle
 import time
+import shutil
 from datetime import datetime
 
 import numpy as np
@@ -130,7 +131,9 @@ def run_es(gens, env_fun, trials, config, parameters, substrate, agents_in_env=1
             net = es_net.create_phenotype_network()
             phenotype_nets.append(net)
 
-        generation_seed = int(time.time())
+        # generation_seed = int(time.time())
+        generation_seed = 17
+
         cpu_count = os.cpu_count()
 
         # Prepare trial runner
@@ -193,8 +196,8 @@ def run_es(gens, env_fun, trials, config, parameters, substrate, agents_in_env=1
     return winner_one, stats_reporter, new_population_state
 
 
-def make_ant_env(ants_in_env=1, food_in_env=1, seed=None):
-    env = ant_arena.AntColonyEnv(ants_in_env, food_in_env, seed=seed)
+def make_ant_env(ants_in_env=1, food_in_env=1, seed=None, render_mode=None):
+    env = ant_arena.AntColonyEnv(ants_in_env, food_in_env, seed=seed, render_mode=render_mode)
     return env
 
 
@@ -202,7 +205,7 @@ if __name__ == "__main__":
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.INFO)
 
-    nr_gens = 50
+    nr_gens = 100
     trials = 1
     ants_per_env = 5
     food_per_env = 70
@@ -211,7 +214,7 @@ if __name__ == "__main__":
     load_population_path = None
 
     save_population = True
-    run_specificity = f"{params(VERSION)['activation']}_rand_nest_angle_rand_ants_pheromone_no_obstacles_no_health_ants-{ants_per_env}_food-{food_per_env}_gen-{nr_gens}"
+    run_specificity = f"{params(VERSION)['activation']}_seeded17_rand_nest_angle_2_stdev_pheromone_no_obstacles_no_health_ants-{ants_per_env}_food-{food_per_env}_gen-{nr_gens}"
 
     timestamp = datetime.now().strftime("%Y-%m-%d;%H-%M-%S")
 
@@ -219,6 +222,7 @@ if __name__ == "__main__":
     winner_file_name = f"es_hyperneat_ant_evolution_{VERSION_TEXT}"
 
     os.makedirs(current_run_directory, exist_ok=True)
+    shutil.copy("configs/config_cppn_ant_evolution", current_run_directory)
 
     # Run! Only relevant to look at the winner.
     winner, stats, population_state = run_es(
@@ -241,9 +245,9 @@ if __name__ == "__main__":
     # Save CPPN if wished to be reused and draw it + winner to file.
     CPPN = neat.nn.FeedForwardNetwork.create(winner, CONFIG)
 
+    display_seed = 17
     # after learning has ended, display the best individuals in pygame
-    display_env = make_ant_env(ants_per_env, food_per_env)
-    display_env.render_mode = "human"
-    display_env.reset()
+    display_env = make_ant_env(ants_per_env, food_per_env, seed=display_seed, render_mode="human")
+    display_env.reset(seed=display_seed)
 
-    display_learning_continuously(display_env, CPPN)
+    display_learning_continuously(display_env, CPPN, seed=display_seed)

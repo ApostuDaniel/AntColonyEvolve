@@ -114,8 +114,8 @@ def run_es(gens, env_fun, trials, config, parameters, substrate, agents_in_env=1
                 fitnesses[i].append(total_rewards[i])
 
         for i, (_, g) in enumerate(genomes):
-            min_trial_fitness = int(np.array(fitnesses[i]).min())
-            g.fitness = min_trial_fitness
+            mean_trial_fitness = float(np.mean(fitnesses[i]))
+            g.fitness = mean_trial_fitness
 
     def eval_fitness_parallel_trials(genomes, config):
         # Build all networks once per generation

@@ -13,13 +13,13 @@ OUTPUT_COORDINATES = get_output_coordinates()
 SUBSTRATE = Substrate(INPUT_COORDINATES, OUTPUT_COORDINATES)
 
 
-def display_learning_continuously(display_env: AntColonyEnv, evolved_cppn):
+def display_learning_continuously(display_env: AntColonyEnv, evolved_cppn, seed=None):
     networks = [ESNetwork(SUBSTRATE, evolved_cppn, params(VERSION)) for a in display_env.agents]
     nets = [network.create_phenotype_network() for network in networks]
     agent_nets = dict(zip(display_env.agents, list(range(len(nets)))))
 
     while True:
-        observations, infos = display_env.reset()
+        observations, infos = display_env.reset(seed=seed)
         terminations = [False]
         truncations = [False]
         total_reward = 0
