@@ -18,7 +18,7 @@ TIME = 12  # seconds
 MAX_STEPS = SIM_FPS * TIME  # number of steps
 
 ANT_DIM = vec2d(6, 6)
-AGENT_SPEED = 12.0  # Maximum ant speed observed in data (pixels)
+AGENT_SPEED = 10.0  # Maximum ant speed observed in data (pixels)
 AGENT_ACCELERATION = 4.0
 TURN_RATE = math.pi / 2  # When turn_left = 1 and turn_right = -1 ori viceversa, allows maximum 180° turn per step
 MAX_TRAVEL_PER_EPISODE = AGENT_SPEED * MAX_STEPS
@@ -37,7 +37,7 @@ MIN_FOOD_PER_CLUSTER = 3
 MAX_FOOD_PER_CLUSTER = 18
 FOOD_SIZE_SCALING = ANT_DIM[0] * 2.5
 ANT_CARRY_CAPACITY = 4
-ANT_LIFE = 50
+ANT_LIFE = 20
 SHOULD_FOOD_DECREASE = True
 SHOULD_FOOD_RESPAWN = False
 
@@ -64,6 +64,15 @@ vision_segments = [
     ((3 * math.pi / 10, math.pi / 2), (0, 0, 255), 'forward_r1'),
 ]
 
+pheromone_detect_segments = [
+    # blue
+    ((-math.pi / 2, -math.pi / 6), (0, 0, 255), 'forward_l1'),
+    # yellow
+    ((-math.pi / 6, math.pi / 6), (255, 255, 0), 'forward'),
+    # red
+    ((math.pi / 6, math.pi / 2), (255, 0, 0), 'forward_r1'),
+]
+
 # 3 vision segments
 # vision_segments = [
 #     # red
@@ -82,9 +91,9 @@ nest_detection_segments = [
 ]
 
 wall_detection_rays = [
-    -math.pi / 2,  # left
+    -math.pi / 3,  # left
     0,  # front
-    math.pi / 2,  # right
+    math.pi / 3,  # right
 ]
 
 PHEROMONE_DETECTION_MAX_RANGE = MIN_VISION_RANGE

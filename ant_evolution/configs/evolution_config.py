@@ -1,4 +1,5 @@
-from .arena_config import vision_segments, view_ranges, pheromone_ranges, PHEROMONE_TYPES, nest_detection_segments, wall_detection_rays
+from .arena_config import vision_segments, view_ranges, pheromone_ranges, PHEROMONE_TYPES, nest_detection_segments, \
+    wall_detection_rays, pheromone_detect_segments
 
 # S, M or L; Small, Medium or Large (logic implemented as "Not 'S' or 'M' then Large").
 VERSION = "S"
@@ -29,6 +30,7 @@ def get_input_coordinates():
     # depending on how many vision segments we use, compute their spacing in the substrate on x-axis
     vision_segments_x_coord = [-1. + i * 2. / (len(vision_segments) - 1) for i in range(len(vision_segments))]
     wall_rays_x_coord = [-1. + i * 2. / (len(wall_detection_rays) - 1) for i in range(len(wall_detection_rays))]
+    pheromone_segments_x_coord = [-1. + i * 2. / (len(pheromone_detect_segments) - 1) for i in range(len(pheromone_detect_segments))]
 
     # provide density areas coordinates
     vision_ranges_y_coord = [-0.9 + 0.1 * i for i in range(len(view_ranges))]
@@ -38,7 +40,7 @@ def get_input_coordinates():
     # provide pheromones coordinates
     pheromone_ranges_y_modifiers = [0.1 * i for i in range(len(pheromone_ranges))]
     for y_modifier in pheromone_ranges_y_modifiers:
-        for x in vision_segments_x_coord:
+        for x in pheromone_segments_x_coord:
             inputs.extend([(x, -0.7 + (i * 0.1) + y_modifier) for i in range(PHEROMONE_TYPES)])  # pheromone coordinates for each vision segment
 
     inputs.extend([(x, -1.0) for x in wall_rays_x_coord])  # wall_distances

@@ -2,6 +2,7 @@ import os
 import pickle
 from pathlib import Path
 from copy import deepcopy
+import matplotlib.pyplot as plt
 
 import neat
 from neat.reporting import BaseReporter
@@ -70,6 +71,8 @@ class BestGenomeReporter(BaseReporter):
         NET = NETWORK.create_phenotype_network(
             filename=os.path.join(save_dir, f"{self.save_file_name}_winner")
         )
+        # close drawing immediately
+        # plt.close(plt.gcf())
 
         draw_net(
             CPPN,
