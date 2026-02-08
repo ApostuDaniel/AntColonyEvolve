@@ -963,12 +963,15 @@ class AntColonyEnv(ParallelEnv):
         'render_fps': SIM_FPS
     }
 
-    def __init__(self, nr_of_ants=10, nr_of_food=20, render_mode=None, seed=None):
+    def __init__(self, nr_of_ants=6, nr_of_food=70, explorer_ratio=0.5, explore_time_ratio=0.2, render_mode=None, seed=None):
         self.ants = None
         self.nest = None
         self.possible_agents = [f"ant_{i}" for i in range(nr_of_ants)]
         self.nr_of_ants = nr_of_ants
         self.nr_of_food = nr_of_food
+        self.explorer_ratio = explorer_ratio
+        self.nr_of_explorers = int(nr_of_ants * self.explorer_ratio)
+        self.steps_to_explore = int(MAX_STEPS * explore_time_ratio)
 
         self.food_sources = None
         self.food_counter = 0
@@ -977,7 +980,7 @@ class AntColonyEnv(ParallelEnv):
         self.noise = 0
 
         self.t = 0
-        self.t_limit = TIME_LIMIT
+        self.t_limit = MAX_STEPS
 
         self.time_offset = None
         self.actions = []
@@ -1128,7 +1131,7 @@ class AntColonyEnv(ParallelEnv):
 
     def _respawn_food(self, respawn_eaten_food=True):
         max_food_draw_radius = (self.ant_arena.arena_radius * 2) * 0.5 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING) * 2
-        min_food_draw_radius = (self.ant_arena.arena_radius * 2) * 0.2
+        min_food_draw_radius = (self.ant_arena.arena_radius * 2) * 0.1
 
         def generate_clustered_food():
             """Generate food clusters using power law distribution."""
@@ -1290,6 +1293,8 @@ class AntColonyEnv(ParallelEnv):
 
         self.ants = {}
 
+        self.nr_of_explorers = int(nr_of_agents * self.explorer_ratio)
+
         if seed is not None:
             self.np_random, _ = self.seed(seed=seed)
 
@@ -1378,8 +1383,10 @@ class AntColonyEnv(ParallelEnv):
         if self.render_mode == "human":
             self._render_frame
 
+        if self.t >= self.steps_to_explore:
+            self.nr_of_explorers = self.nr_of_ants
         # don't respawn food for pheromone training
-        for agent, action in actions.items():
+        for agent, action in list(actions.items())[:self.nr_of_explorers]:
             self.ants[agent].handle_health(action[1], action[2])
             self.ants[agent].handle_food(self.food_sources, self.nest, agent, SHOULD_FOOD_DECREASE)
 
@@ -2021,8 +2028,8 @@ class AntColonyEnv(ParallelEnv):
 
 
 if __name__ == "__main__":
-    seed = 17
-    env = AntColonyEnv(render_mode='human', nr_of_ants=1, nr_of_food=70, seed=seed)
+    seed = None
+    env = AntColonyEnv(render_mode='human', nr_of_ants=6, nr_of_food=90, seed=seed)
 
     while True:
         total_reward = 0

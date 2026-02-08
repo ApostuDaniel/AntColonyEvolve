@@ -14,13 +14,14 @@ arena_sizes = namedtuple('arena_sizes', ['arena_center', 'arena_radius'])
 
 # Global parameters for agent control
 TIMESTEP = 1. / SIM_FPS  # Not sure if this will be necessary, given the fixed FPS?
-TIME_LIMIT = SIM_FPS * 12  # 10 seconds
+TIME = 12  # seconds
+MAX_STEPS = SIM_FPS * TIME  # number of steps
 
 ANT_DIM = vec2d(6, 6)
-AGENT_SPEED = 10.0  # Maximum ant speed observed in data (pixels)
+AGENT_SPEED = 12.0  # Maximum ant speed observed in data (pixels)
 AGENT_ACCELERATION = 4.0
 TURN_RATE = math.pi / 2  # When turn_left = 1 and turn_right = -1 ori viceversa, allows maximum 180° turn per step
-MAX_TRAVEL_PER_EPISODE = AGENT_SPEED * TIME_LIMIT
+MAX_TRAVEL_PER_EPISODE = AGENT_SPEED * MAX_STEPS
 
 NEST_RADIUS = ANT_DIM[0] * 6
 DRAW_NEST_SENSORS = True
@@ -32,7 +33,7 @@ MIDDLE_VISION_RANGE = int(MAX_VISION_RANGE * (2 / 3))
 MIN_VISION_RANGE = int(MAX_VISION_RANGE * (1 / 2))
 
 MAX_FOOD_QUANTITY = 1
-MIN_FOOD_PER_CLUSTER = 2
+MIN_FOOD_PER_CLUSTER = 3
 MAX_FOOD_PER_CLUSTER = 18
 FOOD_SIZE_SCALING = ANT_DIM[0] * 2.5
 ANT_CARRY_CAPACITY = 4
@@ -49,29 +50,29 @@ HIGHLIGHT_BEST_ANT = False
 DRAW_WALL_DISTANCE = True
 
 # 5 vision segments
-# vision_segments = [
-#     # Front arc: Directly in front of the agent
-#     # Bright red, intense and strong
-#     ((-math.pi / 2, -3 * math.pi / 10), (255, 0, 0), 'forward_l1'),
-#     # Vivid orange, warm and energetic
-#     ((-3 * math.pi / 10, -math.pi / 10), (255, 165, 0), 'forward_l2'),
-#     # Bright yellow, cheerful and vibrant
-#     ((-math.pi / 10, math.pi / 10), (255, 255, 0), 'forward'),
-#     # Bright green, fresh and lively
-#     ((math.pi / 10, 3 * math.pi / 10), (0, 255, 0), 'forward_r2'),
-#     # Sky blue, cool and calm
-#     ((3 * math.pi / 10, math.pi / 2), (0, 0, 255), 'forward_r1'),
-# ]
+vision_segments = [
+    # Front arc: Directly in front of the agent
+    # red
+    ((-math.pi / 2, -3 * math.pi / 10), (255, 0, 0), 'forward_l1'),
+    # orange
+    ((-3 * math.pi / 10, -math.pi / 10), (255, 165, 0), 'forward_l2'),
+    # yellow
+    ((-math.pi / 10, math.pi / 10), (255, 255, 0), 'forward'),
+    # green
+    ((math.pi / 10, 3 * math.pi / 10), (0, 255, 0), 'forward_r2'),
+    # blue
+    ((3 * math.pi / 10, math.pi / 2), (0, 0, 255), 'forward_r1'),
+]
 
 # 3 vision segments
-vision_segments = [
-    # red
-    ((-math.pi / 2, -math.pi / 6), (255, 0, 0), 'forward_l1'),
-    # yellow
-    ((-math.pi / 6, math.pi / 6), (255, 255, 0), 'forward'),
-    # blue
-    ((math.pi / 6, math.pi / 2), (0, 0, 255), 'forward_r1'),
-]
+# vision_segments = [
+#     # red
+#     ((-math.pi / 2, -math.pi / 6), (255, 0, 0), 'forward_l1'),
+#     # yellow
+#     ((-math.pi / 6, math.pi / 6), (255, 255, 0), 'forward'),
+#     # blue
+#     ((math.pi / 6, math.pi / 2), (0, 0, 255), 'forward_r1'),
+# ]
 
 nest_detection_segments = [
     (-3 * math.pi / 4, -math.pi / 4, 0),  # left
@@ -146,7 +147,7 @@ def load_parameters(config_file):
     Load parameters from a configuration file and update the global variables.
     Parameters not found in the file will retain their default values.
     """
-    global SIM_FPS, SCREEN_W, SCREEN_H, BOUNDARY_SCALE, TIME_LIMIT, AGENT_SPEED, \
+    global SIM_FPS, SCREEN_W, SCREEN_H, BOUNDARY_SCALE, MAX_STEPS, AGENT_SPEED, \
         AGENT_ACCELERATION, TURN_RATE, MAX_FOOD_QUANTITY, FOOD_SIZE_SCALING, \
         ANT_CARRY_CAPACITY, ANT_LIFE, SHOULD_FOOD_DECREASE, SHOULD_FOOD_RESPAWN, \
         DRAW_ANT_VISION, DRAW_FOOD_DENSITY, DRAW_PHEROMONES, DRAW_PHEROMONE_VISION, \
@@ -162,7 +163,7 @@ def load_parameters(config_file):
         SCREEN_W = config.getint('Arena', 'SCREEN_W', fallback=SCREEN_W)
         SCREEN_H = config.getint('Arena', 'SCREEN_H', fallback=SCREEN_H)
         BOUNDARY_SCALE = config.getfloat('Arena', 'BOUNDARY_SCALE', fallback=BOUNDARY_SCALE)
-        TIME_LIMIT = config.getint('Arena', 'TIME_LIMIT', fallback=TIME_LIMIT)
+        MAX_STEPS = config.getint('Arena', 'TIME_LIMIT', fallback=MAX_STEPS)
         AGENT_SPEED = config.getfloat('Arena', 'AGENT_SPEED', fallback=AGENT_SPEED)
         AGENT_ACCELERATION = config.getfloat('Arena', 'AGENT_ACCELERATION', fallback=AGENT_ACCELERATION)
         TURN_RATE = config.getfloat('Arena', 'TURN_RATE', fallback=TURN_RATE)
@@ -203,7 +204,7 @@ def save_parameters(dir_path):
         'SCREEN_W': SCREEN_W,
         'SCREEN_H': SCREEN_H,
         'BOUNDARY_SCALE': BOUNDARY_SCALE,
-        'TIME_LIMIT': TIME_LIMIT,
+        'TIME_LIMIT': MAX_STEPS,
         'AGENT_SPEED': AGENT_SPEED,
         'AGENT_ACCELERATION': AGENT_ACCELERATION,
         'TURN_RATE': TURN_RATE,

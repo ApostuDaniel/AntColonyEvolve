@@ -187,7 +187,7 @@ if __name__ == "__main__":
     nr_gens = 100
     trials = 2
     ants_per_env = CONFIG.pop_size
-    food_per_env = 40
+    food_per_env = 70
     parallel_trials = False
 
     # load_population_path = "./alg_runs/run_2025-06-30_18-14-26_no_pheromone_test_5_food_13_ants_no_obstacles_no_health_deacrease_gen1/es_hyperneat_ant_evolution_medium_population.pkl"
