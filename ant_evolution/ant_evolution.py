@@ -132,7 +132,7 @@ def run_es(gens, env_fun, trials, config, parameters, substrate, agents_in_env=1
             phenotype_nets.append(net)
 
         generation_seed = int(time.time())
-        # generation_seed = 17
+        # generation_seed = 7
 
         cpu_count = os.cpu_count()
 
@@ -208,7 +208,7 @@ if __name__ == "__main__":
     nr_gens = 500
     trials = 3
     ants_per_env = 6
-    food_per_env = 90
+    food_per_env = 65
 
     # load_population_path = "./alg_runs/run_2025-06-30_18-14-26_no_pheromone_test_5_food_13_ants_no_obstacles_no_health_deacrease_gen1/es_hyperneat_ant_evolution_medium_population.pkl"
     load_population_path = None
@@ -246,6 +246,7 @@ if __name__ == "__main__":
     CPPN = neat.nn.FeedForwardNetwork.create(winner, CONFIG)
 
     display_seed = None
+    # display_seed = 7
     # after learning has ended, display the best individuals in pygame
     display_env = make_ant_env(ants_per_env, food_per_env, seed=display_seed, render_mode="human")
     display_env.reset(seed=display_seed)

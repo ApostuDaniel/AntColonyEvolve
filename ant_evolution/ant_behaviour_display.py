@@ -43,10 +43,10 @@ def display_learning_continuously(display_env: AntColonyEnv, evolved_cppn, seed=
 
 
 if __name__ == "__main__":
-    env = AntColonyEnv(6, 90, render_mode='human', seed=None)
+    env = AntColonyEnv(6, 65, render_mode='human', seed=None)
     env.reset()
 
-    best_agent_file = "alg_runs/run_2026-02-07;14-32-36_tanh_rand_nest_angle_pheromone_no_obstacles_no_health_ants-6_food-90_gen-500/winner/es_hyperneat_ant_evolution_small_cppn.pkl"
+    best_agent_file = "alg_runs/run_2026-02-09;00-35-00_tanh_rand_nest_angle_pheromone_no_obstacles_no_health_ants-6_food-65_gen-500/winner/es_hyperneat_ant_evolution_small_cppn.pkl"
     CPPN = []
     with open(best_agent_file, 'rb') as file:
         CPPN = pickle.load(file)
