@@ -95,7 +95,6 @@ def _run_one_env(index, phenotype_net, nr_activations, trial=0):
     agent_nets = dict(zip(worker_env.agents, list(range(len(nets)))))
 
     while worker_env.agents and not (all(terminations.values()) or any(truncations.values())):
-
         outputs = []
         for agent in worker_env.agents:
             net_id = agent_nets[agent]
@@ -132,7 +131,7 @@ def run_es(gens, env_fun, trials, config, parameters, substrate, agents_in_env=1
             phenotype_nets.append(net)
 
         generation_seed = int(time.time())
-        # generation_seed = 7
+        # generation_seed = 9
 
         cpu_count = os.cpu_count()
 
@@ -205,16 +204,16 @@ if __name__ == "__main__":
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.INFO)
 
-    nr_gens = 500
+    nr_gens = 400
     trials = 3
-    ants_per_env = 6
+    ants_per_env = 4
     food_per_env = 65
 
     # load_population_path = "./alg_runs/run_2025-06-30_18-14-26_no_pheromone_test_5_food_13_ants_no_obstacles_no_health_deacrease_gen1/es_hyperneat_ant_evolution_medium_population.pkl"
     load_population_path = None
 
     save_population = True
-    run_specificity = f"{params(VERSION)['activation']}_rand_nest_angle_pheromone_no_obstacles_no_health_ants-{ants_per_env}_food-{food_per_env}_gen-{nr_gens}"
+    run_specificity = f"{params(VERSION)['activation']}_rand_nest_compass_pheromone_no_obstacles_no_health_ants-{ants_per_env}_food-{food_per_env}_gen-{nr_gens}"
 
     timestamp = datetime.now().strftime("%Y-%m-%d;%H-%M-%S")
 
@@ -245,8 +244,8 @@ if __name__ == "__main__":
     # Save CPPN if wished to be reused and draw it + winner to file.
     CPPN = neat.nn.FeedForwardNetwork.create(winner, CONFIG)
 
+    # display_seed = None
     display_seed = None
-    # display_seed = 7
     # after learning has ended, display the best individuals in pygame
     display_env = make_ant_env(ants_per_env, food_per_env, seed=display_seed, render_mode="human")
     display_env.reset(seed=display_seed)

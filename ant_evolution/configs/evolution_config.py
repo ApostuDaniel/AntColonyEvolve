@@ -11,21 +11,21 @@ def get_input_coordinates():
     inputs = [
         # (0., 0.0), # r_norm
         # (0., -0.5), # theta_norm
-        (-0.5, -0.3),  # speed
-        (-0.5, -0.5),  # theta
+        (-0.5, -0.2),  # speed
+        (-0.5, -0.4),  # theta
         # (0.1, -1.0),  # heartbeat
         # (0.2, -1.0),  # travel_distance
         # (-0.2, -0.8),  # current_energy
-        (+0.5, -0.3),  # carried_food
-        (+0.5, -0.5),  # ant_in_nest
-        (-0.3, -0.15),  # reward_sensor
-        (+0.3, -0.15),  # penalty_sensor
-        (0.0, -0.3),  # distance_to_nest
-        (0.0, -0.5),  # angle_to_nest
+        (+0.5, -0.2),  # carried_food
+        (+0.5, -0.4),  # ant_in_nest
+        (-0.3, -0.05),  # reward_sensor
+        (+0.3, -0.05),  # penalty_sensor
+        # (0.0, -0.3),  # distance_to_nest
+        # (0.0, -0.5),  # angle_to_nest
     ]
 
-    # nest_segments_x = [-1. + i * 2. / (len(nest_detection_segments) - 1) for i in range(len(nest_detection_segments))]
-    # inputs.extend([(x, -0.9) for x in nest_segments_x])
+    nest_segments_x = [-1. + i * 2. / (len(nest_detection_segments) - 1) for i in range(len(nest_detection_segments))]
+    inputs.extend([(x, -0.9) for x in nest_segments_x])
 
     # depending on how many vision segments we use, compute their spacing in the substrate on x-axis
     vision_segments_x_coord = [-1. + i * 2. / (len(vision_segments) - 1) for i in range(len(vision_segments))]
@@ -33,7 +33,7 @@ def get_input_coordinates():
     pheromone_segments_x_coord = [-1. + i * 2. / (len(pheromone_detect_segments) - 1) for i in range(len(pheromone_detect_segments))]
 
     # provide density areas coordinates
-    vision_ranges_y_coord = [-0.9 + 0.1 * i for i in range(len(view_ranges))]
+    vision_ranges_y_coord = [-0.8 + 0.1 * i for i in range(len(view_ranges))]
     for y in vision_ranges_y_coord:
         inputs.extend([(x, y) for x in vision_segments_x_coord])
 
@@ -41,7 +41,7 @@ def get_input_coordinates():
     pheromone_ranges_y_modifiers = [0.1 * i for i in range(len(pheromone_ranges))]
     for y_modifier in pheromone_ranges_y_modifiers:
         for x in pheromone_segments_x_coord:
-            inputs.extend([(x, -0.7 + (i * 0.1) + y_modifier) for i in range(PHEROMONE_TYPES)])  # pheromone coordinates for each vision segment
+            inputs.extend([(x, -0.6 + (i * 0.1) + y_modifier) for i in range(PHEROMONE_TYPES)])  # pheromone coordinates for each vision segment
 
     inputs.extend([(x, -1.0) for x in wall_rays_x_coord])  # wall_distances
     # inputs.extend([(x, -0.9) for x in vision_segments_x_coord])  # vision_segments_food_distances
