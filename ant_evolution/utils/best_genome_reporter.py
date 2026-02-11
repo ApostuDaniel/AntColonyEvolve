@@ -10,7 +10,6 @@ from pureples.es_hyperneat.es_hyperneat import ESNetwork
 from pureples.shared.visualize import draw_net
 from pureples.shared.visualize import draw_net
 
-
 class BestGenomeReporter(BaseReporter):
 
     def __init__(self, save_frequency=5, save_dir=None, save_file_name=None, config=None, substrate=None,
@@ -24,7 +23,6 @@ class BestGenomeReporter(BaseReporter):
         self.substrate = substrate
         self.evolution_parameters = parameters
         self.best_genome = None
-        self.best_population = None
         self.best_generation = 0
         self.best_genome_changed = False
 
@@ -40,14 +38,17 @@ class BestGenomeReporter(BaseReporter):
             # self.best_genome still lives on in the population, if it receives a lower score in the next generation, it
             # it would be removed, but we want to keep the best score across generations
             self.best_genome = deepcopy(best_genome)
-            self.best_population = population
             self.best_generation = self.generation
             self.best_genome_changed = True
 
         if (self.generation + 1) % self.save_frequency == 0:
-            self.save_best_genome(os.path.join(self.save_dir, "last_generation"), best_genome, population, self.generation)
+            current_dir = os.path.join(self.save_dir, "last_generation")
+            # population_dir = os.path.join(self.save_dir, "population")
+            # self.save_current_population_state(population_dir, population, species, self.generation)
+            self.save_best_genome(current_dir, best_genome, self.generation)
+
             if self.best_genome_changed:
-                self.save_best_genome(os.path.join(self.save_dir, "winner"), self.best_genome, self.best_population, self.best_generation)
+                self.save_best_genome(os.path.join(self.save_dir, "winner"), self.best_genome, self.best_generation)
                 self.best_genome_changed = False
 
     def found_solution(self, config, generation, best):
@@ -56,7 +57,29 @@ class BestGenomeReporter(BaseReporter):
         # self.save_best_genome()
         pass
 
-    def save_best_genome(self, save_dir, genome, population, generation):
+    def save_current_population_state(self, save_dir, population, species, generation):
+        os.makedirs(save_dir, exist_ok=True)
+
+        # Remove previous files
+        for file in Path(save_dir).iterdir():
+            if file.is_file():
+                os.remove(file)
+
+        # species.reporters points to the ReporterSet, which contains PlotReporter
+        # and its Tkinter window — making the whole object unpicklable. Temporarily
+        # clear it before pickling; Population.__init__ reassigns it on load anyway
+        # via: self.species.reporters = self.reporters
+        saved_reporters = species.reporters
+        species.reporters = None
+        try:
+            population_state = (population, species, generation)
+            with open(os.path.join(save_dir, f"{self.save_file_name}_population.pkl"),
+                      'wb') as output:
+                pickle.dump(population_state, output, pickle.HIGHEST_PROTOCOL)
+        finally:
+            species.reporters = saved_reporters
+
+    def save_best_genome(self, save_dir, genome, generation):
 
         os.makedirs(save_dir, exist_ok=True)
 
@@ -82,10 +105,6 @@ class BestGenomeReporter(BaseReporter):
         with open(os.path.join(save_dir, f"{self.save_file_name}_cppn.pkl"),
                   'wb') as output:
             pickle.dump(CPPN, output, pickle.HIGHEST_PROTOCOL)
-
-        with open(os.path.join(save_dir, f"{self.save_file_name}_population.pkl"),
-                  'wb') as output:
-            pickle.dump(population, output, pickle.HIGHEST_PROTOCOL)
 
         with open(os.path.join(save_dir, f"{self.save_file_name}_info.txt"),
                   'w') as output:

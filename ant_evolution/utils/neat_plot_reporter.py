@@ -93,7 +93,7 @@ class PlotReporter(BaseReporter):
     def _write_info(self, output):
         output_str = '\n'.join(output) + '\n'
         sys.stdout.write(output_str)
-        with open(self.log_file_path, "a+") as log:
+        with open(self.log_file_path, "a") as log:
             log.writelines(output_str)
 
     def start_generation(self, generation):
@@ -143,6 +143,7 @@ class PlotReporter(BaseReporter):
 
 
     def post_evaluate(self, config, population, species, best_genome):
+
         fitnesses = [c.fitness for c in itervalues(population)]
         fit_mean = mean(fitnesses)
         fit_std = stdev(fitnesses)
@@ -231,7 +232,7 @@ class PlotReporter(BaseReporter):
 
         # Remove previous plots
         for file in Path(self.plot_dir).iterdir():
-            if file.is_file():
+            if file.is_file() and file.suffix in ['.png', '.jpg', '.pdf']:
                 os.remove(file)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H-%M-%S")
