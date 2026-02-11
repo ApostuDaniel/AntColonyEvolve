@@ -8,6 +8,7 @@ from datetime import datetime
 
 import numpy as np
 from neat import StdOutReporter
+from neat.reporting import ReporterSet
 
 import ant_colony_arena as ant_arena
 import neat
@@ -130,8 +131,8 @@ def run_es(gens, env_fun, trials, config, parameters, substrate, agents_in_env=1
             net = es_net.create_phenotype_network()
             phenotype_nets.append(net)
 
-        generation_seed = int(time.time())
-        # generation_seed = 9
+        # generation_seed = int(time.time())
+        generation_seed = 8
 
         cpu_count = os.cpu_count()
 
@@ -169,19 +170,26 @@ def run_es(gens, env_fun, trials, config, parameters, substrate, agents_in_env=1
 
     # Create population and train the network. Return network of winner.
     state = None
-    if load_population_path:
-        with open(load_population_path, 'rb') as file:
-            old_pop_state = pickle.load(file)
-            old_pop_population, old_pop_species, _ = old_pop_state
-            state = (old_pop_population, old_pop_species, 0)
 
     stats_reporter = neat.statistics.StatisticsReporter()
     best_genome_reporter = BestGenomeReporter(save_dir=winner_dir, save_file_name=winner_file_name, config=config,
                                               substrate=substrate, parameters=parameters)
+    if load_population_path:
+        with open(load_population_path, 'rb') as file:
+            old_pop_state = pickle.load(file)
+            old_pop_population, old_pop_species, last_generation = old_pop_state
+            # reporter_set = ReporterSet()
+            # reporter_set.add(stats_reporter)
+            # reporter_set.add(best_genome_reporter)
+            # old_pop_species.reporters = reporter_set
+            state = (old_pop_population, old_pop_species, last_generation)
 
     pop = init_pop(state, config, output_statistics, output_dir)
     pop.add_reporter(stats_reporter)
     pop.add_reporter(best_genome_reporter)
+
+    if load_population_path:
+        pop.species.reporters = pop.reporters
 
     winner_one = pop.run(eval_fitness_parallel_environments, gens)
 
@@ -205,15 +213,15 @@ if __name__ == "__main__":
     LOGGER.setLevel(logging.INFO)
 
     nr_gens = 400
-    trials = 3
+    trials = 1
     ants_per_env = 4
-    food_per_env = 65
+    food_per_env = 75
 
-    # load_population_path = "./alg_runs/run_2025-06-30_18-14-26_no_pheromone_test_5_food_13_ants_no_obstacles_no_health_deacrease_gen1/es_hyperneat_ant_evolution_medium_population.pkl"
+    # load_population_path = "./alg_runs/run_2026-02-11;13-06-33_tanh_rand_nest_compass_pheromone_no_obstacles_no_health_ants-4_food-65_gen-5/population/es_hyperneat_ant_evolution_small_population.pkl"
     load_population_path = None
 
     save_population = True
-    run_specificity = f"{params(VERSION)['activation']}_rand_nest_compass_pheromone_no_obstacles_no_health_ants-{ants_per_env}_food-{food_per_env}_gen-{nr_gens}"
+    run_specificity = f"{params(VERSION)['activation']}_seeded_angled_substrate_rand_nest_compass_pheromone_no_obstacles_no_health_ants-{ants_per_env}_food-{food_per_env}_gen-{nr_gens}"
 
     timestamp = datetime.now().strftime("%Y-%m-%d;%H-%M-%S")
 
@@ -241,11 +249,16 @@ if __name__ == "__main__":
 
     print(f"es_hyperneat_ant_evolution_{VERSION_TEXT} done")
 
+    if save_population:
+        with open(os.path.join(current_run_directory, f'{winner_file_name}_population.pkl'),
+                  'wb') as output:
+            pickle.dump(population_state, output, pickle.HIGHEST_PROTOCOL)
+
     # Save CPPN if wished to be reused and draw it + winner to file.
     CPPN = neat.nn.FeedForwardNetwork.create(winner, CONFIG)
 
     # display_seed = None
-    display_seed = None
+    display_seed = 8
     # after learning has ended, display the best individuals in pygame
     display_env = make_ant_env(ants_per_env, food_per_env, seed=display_seed, render_mode="human")
     display_env.reset(seed=display_seed)

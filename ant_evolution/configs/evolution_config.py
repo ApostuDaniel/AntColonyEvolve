@@ -1,3 +1,5 @@
+import math
+
 from .arena_config import vision_segments, view_ranges, pheromone_ranges, PHEROMONE_TYPES, nest_detection_segments, \
     wall_detection_rays, pheromone_detect_segments
 
@@ -24,13 +26,20 @@ def get_input_coordinates():
         # (0.0, -0.5),  # angle_to_nest
     ]
 
-    nest_segments_x = [-1. + i * 2. / (len(nest_detection_segments) - 1) for i in range(len(nest_detection_segments))]
+    # nest_segments_x = [-1. + i * 2. / (len(nest_detection_segments) - 1) for i in range(len(nest_detection_segments))]
+    nest_segments_x = normalize_angles_to_range([(seg[0] + seg[1]) / 2 for seg in nest_detection_segments], angle_range=math.pi)
     inputs.extend([(x, -0.9) for x in nest_segments_x])
 
     # depending on how many vision segments we use, compute their spacing in the substrate on x-axis
-    vision_segments_x_coord = [-1. + i * 2. / (len(vision_segments) - 1) for i in range(len(vision_segments))]
-    wall_rays_x_coord = [-1. + i * 2. / (len(wall_detection_rays) - 1) for i in range(len(wall_detection_rays))]
-    pheromone_segments_x_coord = [-1. + i * 2. / (len(pheromone_detect_segments) - 1) for i in range(len(pheromone_detect_segments))]
+    # vision_segments_x_coord = [-1. + i * 2. / (len(vision_segments) - 1) for i in range(len(vision_segments))]
+    vision_segments_x_coord = normalize_angles_to_range([(seg[0][0] + seg[0][1]) / 2 for seg in vision_segments], angle_range=math.pi)
+
+    # wall_rays_x_coord = [-1. + i * 2. / (len(wall_detection_rays) - 1) for i in range(len(wall_detection_rays))]
+    wall_rays_x_coord = normalize_angles_to_range(wall_detection_rays, angle_range=math.pi)
+
+    # pheromone_segments_x_coord = [-1. + i * 2. / (len(pheromone_detect_segments) - 1) for i in range(len(pheromone_detect_segments))]
+    pheromone_segments_x_coord = normalize_angles_to_range([(seg[0][0] + seg[0][1]) / 2 for seg in pheromone_detect_segments], angle_range=math.pi)
+
 
     # provide density areas coordinates
     vision_ranges_y_coord = [-0.8 + 0.1 * i for i in range(len(view_ranges))]
@@ -48,6 +57,10 @@ def get_input_coordinates():
     # inputs.extend([(x, -0.8) for x in vision_segments_x_coord])  # vision_segments_food_angles
 
     return inputs
+
+
+def normalize_angles_to_range(angles, angle_range=math.pi):
+    return [angle / angle_range for angle in angles]
 
 
 def get_output_coordinates():

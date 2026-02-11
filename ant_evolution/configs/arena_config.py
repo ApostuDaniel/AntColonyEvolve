@@ -50,19 +50,19 @@ HIGHLIGHT_BEST_ANT = False
 DRAW_WALL_DISTANCE = True
 
 # 5 vision segments
-vision_segments = [
-    # Front arc: Directly in front of the agent
-    # red
-    ((-math.pi / 2, -3 * math.pi / 10), (255, 0, 0), 'forward_l1'),
-    # orange
-    ((-3 * math.pi / 10, -math.pi / 10), (255, 165, 0), 'forward_l2'),
-    # yellow
-    ((-math.pi / 10, math.pi / 10), (255, 255, 0), 'forward'),
-    # green
-    ((math.pi / 10, 3 * math.pi / 10), (0, 255, 0), 'forward_r2'),
-    # blue
-    ((3 * math.pi / 10, math.pi / 2), (0, 0, 255), 'forward_r1'),
-]
+# vision_segments = [
+#     # Front arc: Directly in front of the agent
+#     # red
+#     ((-math.pi / 2, -3 * math.pi / 10), (255, 0, 0), 'forward_l1'),
+#     # orange
+#     ((-3 * math.pi / 10, -math.pi / 10), (255, 165, 0), 'forward_l2'),
+#     # yellow
+#     ((-math.pi / 10, math.pi / 10), (255, 255, 0), 'forward'),
+#     # green
+#     ((math.pi / 10, 3 * math.pi / 10), (0, 255, 0), 'forward_r2'),
+#     # blue
+#     ((3 * math.pi / 10, math.pi / 2), (0, 0, 255), 'forward_r1'),
+# ]
 
 pheromone_detect_segments = [
     # blue
@@ -74,20 +74,24 @@ pheromone_detect_segments = [
 ]
 
 # 3 vision segments
-# vision_segments = [
-#     # red
-#     ((-math.pi / 2, -math.pi / 6), (255, 0, 0), 'forward_l1'),
-#     # yellow
-#     ((-math.pi / 6, math.pi / 6), (255, 255, 0), 'forward'),
-#     # blue
-#     ((math.pi / 6, math.pi / 2), (0, 0, 255), 'forward_r1'),
-# ]
+vision_segments = [
+    # red
+    ((-math.pi / 2, -math.pi / 6), (255, 0, 0), 'forward_l1'),
+    # yellow
+    ((-math.pi / 6, math.pi / 6), (255, 255, 0), 'forward'),
+    # blue
+    ((math.pi / 6, math.pi / 2), (0, 0, 255), 'forward_r1'),
+]
+
+segment_width = 2 * math.pi / 5  # 72 degrees
+half = segment_width / 2  # 36 degrees
 
 nest_detection_segments = [
-    (-3 * math.pi / 4, -math.pi / 4, 0),  # left
-    (3 * math.pi / 4, -3 * math.pi / 4, 1),  # back
-    (-math.pi / 4, math.pi / 4, 2),  # front
-    (math.pi / 4, 3 * math.pi / 4, 3),  # right
+    (-5 * half, -3 * half, 0),  # back-left   (-180° to -108°)
+    (-3 * half, -half, 1),  # front-left  (-108° to  -36°)
+    (-half, half, 2),  # front       ( -36° to   36°)  ← centered
+    (half, 3 * half, 3),  # front-right (  36° to  108°)
+    (3 * half, 5 * half, 4),  # back-right  ( 108° to  180°)
 ]
 
 wall_detection_rays = [

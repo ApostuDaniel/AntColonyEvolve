@@ -1133,7 +1133,7 @@ class AntColonyEnv(ParallelEnv):
 
     def _respawn_food(self, respawn_eaten_food=True):
         max_food_draw_radius = (self.ant_arena.arena_radius * 2) * 0.4 - (MAX_FOOD_QUANTITY * FOOD_SIZE_SCALING) * 2
-        min_food_draw_radius = (self.nest.radius * 2) * 6
+        min_food_draw_radius = (self.nest.radius * 2) * 4
 
         def generate_clustered_food():
             """Generate food clusters using power law distribution."""
@@ -2038,8 +2038,8 @@ class AntColonyEnv(ParallelEnv):
 
 
 if __name__ == "__main__":
-    seed = 9
-    env = AntColonyEnv(render_mode='human', nr_of_ants=4, nr_of_food=65, seed=seed)
+    seed = 8
+    env = AntColonyEnv(render_mode='human', nr_of_ants=4, nr_of_food=75, seed=seed)
 
     while True:
         total_reward = 0
