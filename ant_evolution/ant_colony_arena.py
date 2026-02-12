@@ -488,7 +488,7 @@ class Ant():
         angle_to_nest = math.atan2(dy, dx)
 
         # Convert to relative angle (range: -π to π)
-        relative_angle_to_nest = (angle_to_nest - self.theta + math.pi) % (2 * math.pi)
+        relative_angle_to_nest = (angle_to_nest - self.theta + math.pi) % (2 * math.pi) - math.pi
 
         distance = math.sqrt(dx ** 2 + dy ** 2)
         ant_in_nest = nest.is_ant_in_nest(self)
@@ -2046,7 +2046,7 @@ if __name__ == "__main__":
         observations, infos = env.reset(seed=seed)
 
         manual_mode = True
-        manual_action = [0.0, 0.0, 0.0, 1.0]
+        manual_action = [0.0, 0.0, 0.0, -1.0]
 
         terminations = [False]
         truncations = [False]

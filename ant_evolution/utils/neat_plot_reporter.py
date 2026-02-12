@@ -141,7 +141,6 @@ class PlotReporter(BaseReporter):
             output.append("Generation time: {0:.3f} sec".format(elapsed))
         self._write_info(output)
 
-
     def post_evaluate(self, config, population, species, best_genome):
 
         fitnesses = [c.fitness for c in itervalues(population)]
@@ -151,9 +150,9 @@ class PlotReporter(BaseReporter):
         output = []
         output.append('Population\'s average fitness: {0:3.5f} stdev: {1:3.5f}'.format(fit_mean, fit_std))
         output.append('Best fitness: {0:3.5f} - size: {1!r} - species {2} - id {3}'.format(best_genome.fitness,
-                                                                                 best_genome.size(),
-                                                                                 best_species_id,
-                                                                                 best_genome.key))
+                                                                                           best_genome.size(),
+                                                                                           best_species_id,
+                                                                                           best_genome.key))
 
         self._write_info(output)
         # Store data for population fitness plot
@@ -174,7 +173,6 @@ class PlotReporter(BaseReporter):
         if (self.generation + 1) % self.plot_update_frequency == 0:
             # Update plots
             self.update_plots()
-
 
     def update_plots(self):
         """Update both population and species fitness plots."""
@@ -261,9 +259,13 @@ class PlotReporter(BaseReporter):
         self._write_info(['\nBest individual in generation {0} meets fitness threshold - complexity: {1!r}'.format(
             self.generation, best.size())])
 
+        self.update_plots()
+        self.save_plots()
+
     def species_stagnant(self, sid, species):
         if self.show_species_detail:
-            self._write_info(["\nSpecies {0} with {1} members is stagnated: removing it".format(sid, len(species.members))])
+            self._write_info(
+                ["\nSpecies {0} with {1} members is stagnated: removing it".format(sid, len(species.members))])
 
     def info(self, msg):
         self._write_info([msg])

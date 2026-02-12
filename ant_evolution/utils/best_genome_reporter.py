@@ -52,9 +52,8 @@ class BestGenomeReporter(BaseReporter):
                 self.best_genome_changed = False
 
     def found_solution(self, config, generation, best):
-        # self.best_genome = best
-        # self.best_generation = self.generation
-        # self.save_best_genome()
+        self.save_best_genome(os.path.join(self.save_dir, "winner"), best, generation)
+        self.save_best_genome(os.path.join(self.save_dir, "last_generation"), best, generation)
         pass
 
     def save_current_population_state(self, save_dir, population, species, generation):

@@ -14,7 +14,7 @@ arena_sizes = namedtuple('arena_sizes', ['arena_center', 'arena_radius'])
 
 # Global parameters for agent control
 TIMESTEP = 1. / SIM_FPS  # Not sure if this will be necessary, given the fixed FPS?
-TIME = 12  # seconds
+TIME = 15  # seconds
 MAX_STEPS = SIM_FPS * TIME  # number of steps
 
 ANT_DIM = vec2d(6, 6)
@@ -105,7 +105,7 @@ PHEROMONE_DETECTION_MIN_RANGE = PHEROMONE_DETECTION_MAX_RANGE / 1.5
 PHEROMONE_TYPES = 2
 PHEROMONE_COLORS = [(255, 0, 0), (0, 0, 255)]
 PHEROMONE_DECAY = 0.992
-PHEROMONE_DIFFUSION = 0.05
+PHEROMONE_DIFFUSION = 0.03
 CLUSTER_ALPHA = 2.0
 PHEROMONE_DEPOSIT = 1.0
 MAX_PHEROMONE_CONCENTRATION_PER_ZONE = 6
