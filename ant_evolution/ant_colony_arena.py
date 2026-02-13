@@ -840,12 +840,12 @@ class Ant():
             self._detect_wall_distances()
 
         # Add pheromone sensor values (flattened: 3 segments * 3 types = 9 values)
-        if pheromone_grid is not None and cell_size is not None:
-            self.pheromone_sensors = self._detect_pheromones(pheromone_grid, cell_size)
-            # clip value to max detectable
-            self.pheromone_sensors = np.clip(self.pheromone_sensors, 0, MAX_PHEROMONE_CONCENTRATION_PER_ZONE)
-            # normalize concentrations
-            self.pheromone_sensors /= MAX_PHEROMONE_CONCENTRATION_PER_ZONE
+        # if pheromone_grid is not None and cell_size is not None:
+        #     self.pheromone_sensors = self._detect_pheromones(pheromone_grid, cell_size)
+        #     # clip value to max detectable
+        #     self.pheromone_sensors = np.clip(self.pheromone_sensors, 0, MAX_PHEROMONE_CONCENTRATION_PER_ZONE)
+        #     # normalize concentrations
+        #     self.pheromone_sensors /= MAX_PHEROMONE_CONCENTRATION_PER_ZONE
 
         # cardinal points detection
         nest_detection_zones, ant_in_nest = self._detect_nest(nest)
@@ -882,7 +882,7 @@ class Ant():
             for range_idx in range(len(view_ranges)):
                 result.append(density_areas[segment_idx][range_idx]['food'])
 
-        result.extend(self.pheromone_sensors.flatten())
+        # result.extend(self.pheromone_sensors.flatten())
 
         # add scaled nearest wall distances per vision segment
         result.extend([self.wall_distances[i] for i in range(len(self.wall_distances))])
@@ -1071,8 +1071,8 @@ class AntColonyEnv(ParallelEnv):
             # "angle_to_nest": Box(-1., 1., (1,), np.float32),
             "nest_detection_zones": Box(0.0, 1., (4,), np.float32),
             'density_areas': Box(0.0, 1.0, (len(vision_segments) * len(view_ranges),)),
-            'pheromone_sensors': Box(0.0, 1.0,
-                                     (len(pheromone_ranges) * len(pheromone_detect_segments) * PHEROMONE_TYPES,)),
+            # 'pheromone_sensors': Box(0.0, 1.0,
+            #                          (len(pheromone_ranges) * len(pheromone_detect_segments) * PHEROMONE_TYPES,)),
             'vision_segments_wall_distances': Box(0.0, 1.0, (len(vision_segments), np.float32)),
             # 'vision_segments_food_distances': Box(0.0, 1.0, (len(vision_segments), np.float32)),
             # 'vision_segments_food_angles': Box(-1.0, 1., (len(vision_segments),)),

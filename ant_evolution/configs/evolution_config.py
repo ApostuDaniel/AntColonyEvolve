@@ -47,10 +47,10 @@ def get_input_coordinates():
         inputs.extend([(x, y) for x in vision_segments_x_coord])
 
     # provide pheromones coordinates
-    pheromone_ranges_y_modifiers = [0.1 * i for i in range(len(pheromone_ranges))]
-    for y_modifier in pheromone_ranges_y_modifiers:
-        for x in pheromone_segments_x_coord:
-            inputs.extend([(x, -0.6 + (i * 0.1) + y_modifier) for i in range(PHEROMONE_TYPES)])  # pheromone coordinates for each vision segment
+    # pheromone_ranges_y_modifiers = [0.1 * i for i in range(len(pheromone_ranges))]
+    # for y_modifier in pheromone_ranges_y_modifiers:
+    #     for x in pheromone_segments_x_coord:
+    #         inputs.extend([(x, -0.6 + (i * 0.1) + y_modifier) for i in range(PHEROMONE_TYPES)])  # pheromone coordinates for each vision segment
 
     inputs.extend([(x, -1.0) for x in wall_rays_x_coord])  # wall_distances
     # inputs.extend([(x, -0.9) for x in vision_segments_x_coord])  # vision_segments_food_distances
