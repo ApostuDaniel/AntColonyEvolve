@@ -27,8 +27,8 @@ def get_input_coordinates():
     ]
 
     # nest_segments_x = [-1. + i * 2. / (len(nest_detection_segments) - 1) for i in range(len(nest_detection_segments))]
-    nest_segments_x = normalize_angles_to_range([(seg[0] + seg[1]) / 2 for seg in nest_detection_segments], angle_range=math.pi)
-    inputs.extend([(x, -0.9) for x in nest_segments_x])
+    # nest_segments_x = normalize_angles_to_range([(seg[0] + seg[1]) / 2 for seg in nest_detection_segments], angle_range=math.pi)
+    # inputs.extend([(x, -0.9) for x in nest_segments_x])
 
     # depending on how many vision segments we use, compute their spacing in the substrate on x-axis
     # vision_segments_x_coord = [-1. + i * 2. / (len(vision_segments) - 1) for i in range(len(vision_segments))]

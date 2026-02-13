@@ -24,7 +24,7 @@ TURN_RATE = math.pi / 2  # When turn_left = 1 and turn_right = -1 ori viceversa,
 MAX_TRAVEL_PER_EPISODE = AGENT_SPEED * MAX_STEPS
 
 NEST_RADIUS = ANT_DIM[0] * 6
-DRAW_NEST_SENSORS = True
+DRAW_NEST_SENSORS = False
 
 SPEED_PENALTY_BASE = 1.5 ** (1 / AGENT_SPEED)
 

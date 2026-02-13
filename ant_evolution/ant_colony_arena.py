@@ -874,7 +874,7 @@ class Ant():
             int(self.wall_collision),  # penalty sensor
             # np.clip(nest_distance / self.arena_radius, 0, 1),  # normalize to arena radius, clip if further
             # nest_angle / (2 * math.pi),  # normalized angle to nest
-            *self.nest_detection_zones  # 1 shows whether nest is to the front, right back or left, 0 all else
+            # *self.nest_detection_zones  # 1 shows whether nest is to the front, right back or left, 0 all else
         ]
 
         # Include the food density for each food detection area
@@ -1069,7 +1069,7 @@ class AntColonyEnv(ParallelEnv):
             "penalty_sensor": Box(0., 1., (1,), np.float32),
             # "distance_to_nest": Box(0.0, 1., (1,), np.float32),
             # "angle_to_nest": Box(-1., 1., (1,), np.float32),
-            "nest_detection_zones": Box(0.0, 1., (4,), np.float32),
+            # "nest_detection_zones": Box(0.0, 1., (4,), np.float32),
             'density_areas': Box(0.0, 1.0, (len(vision_segments) * len(view_ranges),)),
             'pheromone_sensors': Box(0.0, 1.0,
                                      (len(pheromone_ranges) * len(pheromone_detect_segments) * PHEROMONE_TYPES,)),
