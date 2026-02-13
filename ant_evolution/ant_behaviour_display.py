@@ -43,7 +43,7 @@ def display_learning_continuously(display_env: AntColonyEnv, evolved_cppn, seed=
 
 
 if __name__ == "__main__":
-    env = AntColonyEnv(4, 65, render_mode='human', seed=None)
+    env = AntColonyEnv(4, 75, render_mode='human', seed=None)
     env.reset()
 
     best_agent_file = "alg_runs/run_2026-02-12;16-06-12_tanh_5vision_angled_substrate_rand_nest_compass_ants-4_food-75_gen-600/last_generation/es_hyperneat_ant_evolution_small_cppn.pkl"
