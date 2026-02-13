@@ -212,16 +212,16 @@ if __name__ == "__main__":
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.INFO)
 
-    nr_gens = 300
+    nr_gens = 600
     trials = 3
     ants_per_env = 4
     food_per_env = 75
 
-    load_population_path = "./alg_runs/run_2026-02-12;01-38-04_tanh_angled_substrate_rand_nest_compass_ants-4_food-75_gen-600/es_hyperneat_ant_evolution_small_population.pkl"
-    # load_population_path = None
+    # load_population_path = "./alg_runs/run_2026-02-12;01-38-04_tanh_angled_substrate_rand_nest_compass_ants-4_food-75_gen-600/es_hyperneat_ant_evolution_small_population.pkl"
+    load_population_path = None
 
     save_population = True
-    run_specificity = f"{params(VERSION)['activation']}_continued_angled_substrate_rand_nest_compass_ants-{ants_per_env}_food-{food_per_env}_gen-{nr_gens}"
+    run_specificity = f"{params(VERSION)['activation']}_5vision_angled_substrate_rand_nest_compass_ants-{ants_per_env}_food-{food_per_env}_gen-{nr_gens}"
 
     timestamp = datetime.now().strftime("%Y-%m-%d;%H-%M-%S")
 

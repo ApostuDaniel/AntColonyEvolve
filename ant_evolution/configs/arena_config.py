@@ -50,18 +50,28 @@ HIGHLIGHT_BEST_ANT = False
 DRAW_WALL_DISTANCE = True
 
 # 5 vision segments
+vision_segments = [
+    # Front arc: Directly in front of the agent
+    # red
+    ((-math.pi / 2, -3 * math.pi / 10), (255, 0, 0), 'forward_l1'),
+    # orange
+    ((-3 * math.pi / 10, -math.pi / 10), (255, 165, 0), 'forward_l2'),
+    # yellow
+    ((-math.pi / 10, math.pi / 10), (255, 255, 0), 'forward'),
+    # green
+    ((math.pi / 10, 3 * math.pi / 10), (0, 255, 0), 'forward_r2'),
+    # blue
+    ((3 * math.pi / 10, math.pi / 2), (0, 0, 255), 'forward_r1'),
+]
+
+# # 3 vision segments
 # vision_segments = [
-#     # Front arc: Directly in front of the agent
 #     # red
-#     ((-math.pi / 2, -3 * math.pi / 10), (255, 0, 0), 'forward_l1'),
-#     # orange
-#     ((-3 * math.pi / 10, -math.pi / 10), (255, 165, 0), 'forward_l2'),
+#     ((-math.pi / 2, -math.pi / 6), (255, 0, 0), 'forward_l1'),
 #     # yellow
-#     ((-math.pi / 10, math.pi / 10), (255, 255, 0), 'forward'),
-#     # green
-#     ((math.pi / 10, 3 * math.pi / 10), (0, 255, 0), 'forward_r2'),
+#     ((-math.pi / 6, math.pi / 6), (255, 255, 0), 'forward'),
 #     # blue
-#     ((3 * math.pi / 10, math.pi / 2), (0, 0, 255), 'forward_r1'),
+#     ((math.pi / 6, math.pi / 2), (0, 0, 255), 'forward_r1'),
 # ]
 
 pheromone_detect_segments = [
@@ -71,16 +81,6 @@ pheromone_detect_segments = [
     ((-math.pi / 6, math.pi / 6), (255, 255, 0), 'forward'),
     # red
     ((math.pi / 6, math.pi / 2), (255, 0, 0), 'forward_r1'),
-]
-
-# 3 vision segments
-vision_segments = [
-    # red
-    ((-math.pi / 2, -math.pi / 6), (255, 0, 0), 'forward_l1'),
-    # yellow
-    ((-math.pi / 6, math.pi / 6), (255, 255, 0), 'forward'),
-    # blue
-    ((math.pi / 6, math.pi / 2), (0, 0, 255), 'forward_r1'),
 ]
 
 segment_width = 2 * math.pi / 5  # 72 degrees
