@@ -835,8 +835,8 @@ class Ant():
         if food_sources is not None:
             detected_food, density_areas, food_in_eating_range = self._detect_nearby_food(food_sources, food_grid)
             self.food_in_eating_range = food_in_eating_range
-            self.density_areas = self._normalize_food_density(density_areas, MAX_FOOD_QUANTITY)
-            self._detect_food_distances(detected_food)
+            # self.density_areas = self._normalize_food_density(density_areas, MAX_FOOD_QUANTITY)
+            # self._detect_food_distances(detected_food)
             self._detect_wall_distances()
 
         # Add pheromone sensor values (flattened: 3 segments * 3 types = 9 values)
@@ -878,9 +878,9 @@ class Ant():
         ]
 
         # Include the food density for each food detection area
-        for segment_idx in range(len(vision_segments)):
-            for range_idx in range(len(view_ranges)):
-                result.append(density_areas[segment_idx][range_idx]['food'])
+        # for segment_idx in range(len(vision_segments)):
+        #     for range_idx in range(len(view_ranges)):
+        #         result.append(density_areas[segment_idx][range_idx]['food'])
 
         result.extend(self.pheromone_sensors.flatten())
 
@@ -1070,7 +1070,7 @@ class AntColonyEnv(ParallelEnv):
             # "distance_to_nest": Box(0.0, 1., (1,), np.float32),
             # "angle_to_nest": Box(-1., 1., (1,), np.float32),
             "nest_detection_zones": Box(0.0, 1., (4,), np.float32),
-            'density_areas': Box(0.0, 1.0, (len(vision_segments) * len(view_ranges),)),
+            # 'density_areas': Box(0.0, 1.0, (len(vision_segments) * len(view_ranges),)),
             'pheromone_sensors': Box(0.0, 1.0,
                                      (len(pheromone_ranges) * len(pheromone_detect_segments) * PHEROMONE_TYPES,)),
             'vision_segments_wall_distances': Box(0.0, 1.0, (len(vision_segments), np.float32)),
@@ -1862,6 +1862,26 @@ class AntColonyEnv(ParallelEnv):
                             (end_x, end_y),
                             1
                         )
+    def draw_wall_distance(self, canvas: pygame.Surface):
+        for segment_idx, ((angle_range_start, angle_range_end), colour, _) in enumerate(vision_segments):
+            for agent in self.agents:
+                ant = self.ants[agent]
+                # Draw wall distance indicators
+                for idx, angle in enumerate(wall_detection_rays):
+                    central_angle = (ant.theta + angle) % (2 * math.pi)
+                    distance = ant.wall_distances[idx] * MAX_VISION_RANGE
+
+                    end_x = int(ant.pos.x + math.cos(central_angle) * distance)
+                    end_y = int(ant.pos.y + math.sin(central_angle) * distance)
+
+                    # Draw a line from the ant to wall, or max vision range
+                    pygame.draw.line(
+                        canvas,
+                        (0, 255, 0),  # Purple color for wall distance
+                        (int(ant.pos.x), int(ant.pos.y)),
+                        (end_x, end_y),
+                        1
+                    )
 
     def draw_ants(self, canvas: pygame.Surface, font: pygame.font, draw_ant_vision=True):
         # Draw nearest ant distance indicators
@@ -2015,12 +2035,14 @@ class AntColonyEnv(ParallelEnv):
 
         self.draw_nest(canvas, font)
 
-        ### THEN DRAW FOOD SOURCES AT THEIR CURRENT POSITIONS
-
+        # THEN DRAW FOOD SOURCES AT THEIR CURRENT POSITIONS
         self.draw_food(canvas, font)
 
         if DRAW_ANT_VISION:
             self.draw_ant_vision(canvas, font, DRAW_FOOD_DENSITY)
+
+        if DRAW_WALL_DISTANCE:
+            self.draw_wall_distance(canvas)
 
         self.draw_ants(canvas, font, DRAW_ANT_VISION)
 

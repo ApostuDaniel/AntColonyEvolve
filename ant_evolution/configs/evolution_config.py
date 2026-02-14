@@ -42,9 +42,9 @@ def get_input_coordinates():
 
 
     # provide density areas coordinates
-    vision_ranges_y_coord = [-0.8 + 0.1 * i for i in range(len(view_ranges))]
-    for y in vision_ranges_y_coord:
-        inputs.extend([(x, y) for x in vision_segments_x_coord])
+    # vision_ranges_y_coord = [-0.8 + 0.1 * i for i in range(len(view_ranges))]
+    # for y in vision_ranges_y_coord:
+    #     inputs.extend([(x, y) for x in vision_segments_x_coord])
 
     # provide pheromones coordinates
     pheromone_ranges_y_modifiers = [0.1 * i for i in range(len(pheromone_ranges))]
