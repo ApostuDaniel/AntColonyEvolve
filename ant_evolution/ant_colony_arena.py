@@ -778,12 +778,14 @@ class Ant():
         #         self.current_energy += self.carried_food
         #         self.carried_food = 0
 
-    def place_pheromone(self, pheromone_action, pheromone_grid, pheromone_intervals, cell_size):
+    def place_pheromone(self, pheromone_action, pheromone_grid, pheromone_intervals, cell_size, noise=0.05):
         grid_x = int(self.pos.x / cell_size)
         grid_y = int(self.pos.y / cell_size)
 
         # we want the interval for no pheromone placement to be close to the 0 value
         no_pheromone_interval = PHEROMONE_TYPES / 2
+        pheromone_action += np.random.randn() * noise
+        pheromone_action = np.clip(pheromone_action, -1, 1)
 
         fitting_pheromone_mask = (pheromone_action >= pheromone_intervals[:, 0]) & (
                 pheromone_action <= pheromone_intervals[:, 1])
@@ -893,15 +895,15 @@ class Ant():
 
         return result
 
-    def update(self, noise=0.0):
-        self.pos = vec2d(
-            self.pos.x + np.random.randn() * noise,
-            self.pos.y - np.random.randn() * noise
-        )
+    def update(self, noise=0.05):
+        # self.pos = vec2d(
+        #     self.pos.x + np.random.randn() * noise,
+        #     self.pos.y - np.random.randn() * noise
+        # )
         self.theta += (np.random.randn() * noise)
         self.theta = self.theta % (2 * math.pi)
 
-        self.speed = self.desired_speed
+        self.speed = np.clip((self.desired_speed + np.random.randn() * noise), -1, 1)
 
         # self._turn()
         self._move()
