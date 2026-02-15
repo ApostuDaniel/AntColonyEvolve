@@ -1,0 +1,12 @@
+
+Species 21 with 14 members is stagnated: removing it
+Average adjusted fitness: 0.177
+Mean genetic distance 1.825, standard deviation 0.515
+Population of 100 members in 3 species:
+   ID   age  size  fitness  adj fit  stag
+  ====  ===  ====  =======  =======  ====
+    18  166    21      5.6    0.127    20
+    20  108    37      7.2    0.168    25
+    24    1    42      5.3    0.236     0
+Total extinctions: 0
+Generation time: 41.217 sec (39.831 average)

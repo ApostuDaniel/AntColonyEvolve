@@ -5,84 +5,115 @@ import os
 
 SIM_FPS = 60  # Simulation environment FPS
 
-SCREEN_W = 960
-SCREEN_H = 960
-BOUNDARY_SCALE = 0.01
+SCREEN_W = 1152
+SCREEN_H = 1152
+BOUNDARY_SCALE = 0.005
 
 vec2d = namedtuple('vec2d', ['x', 'y'])
 arena_sizes = namedtuple('arena_sizes', ['arena_center', 'arena_radius'])
 
 # Global parameters for agent control
 TIMESTEP = 1. / SIM_FPS  # Not sure if this will be necessary, given the fixed FPS?
-TIME_LIMIT = SIM_FPS * 10  # 12 seconds
+TIME = 15  # seconds
+MAX_STEPS = SIM_FPS * TIME  # number of steps
 
-ANT_DIM = vec2d(7, 7)
-AGENT_SPEED = 13.00  # Maximum ant speed observed in data (pixels)
-AGENT_ACCELERATION = 5.0
-TURN_RATE = 2 * 0.3575  # Maximum turning rate observed in data (radians)
-MAX_TRAVEL_PER_EPISODE = AGENT_SPEED * TIME_LIMIT
+ANT_DIM = vec2d(6, 6)
+AGENT_SPEED = 10.0  # Maximum ant speed observed in data (pixels)
+AGENT_ACCELERATION = 4.0
+TURN_RATE = math.pi / 2  # When turn_left = 1 and turn_right = -1 ori viceversa, allows maximum 180° turn per step
+MAX_TRAVEL_PER_EPISODE = AGENT_SPEED * MAX_STEPS
 
-NEST_RADIUS = SCREEN_W / 20
+NEST_RADIUS = ANT_DIM[0] * 6
 DRAW_NEST_SENSORS = True
 
 SPEED_PENALTY_BASE = 1.5 ** (1 / AGENT_SPEED)
 
-MAX_VISION_RANGE = ANT_DIM.x * 16
+MAX_VISION_RANGE = ANT_DIM.x * 14
 MIDDLE_VISION_RANGE = int(MAX_VISION_RANGE * (2 / 3))
-MIN_VISION_RANGE = int(MAX_VISION_RANGE * (1 / 3))
+MIN_VISION_RANGE = int(MAX_VISION_RANGE * (1 / 2))
 
-MAX_FOOD_QUANTITY = 150
-FOOD_SIZE_SCALING = 0.3
-ANT_CARRY_CAPACITY = 30
-ANT_LIFE = 150
+MAX_FOOD_QUANTITY = 1
+MIN_FOOD_PER_CLUSTER = 3
+MAX_FOOD_PER_CLUSTER = 18
+FOOD_SIZE_SCALING = ANT_DIM[0] * 2.5
+ANT_CARRY_CAPACITY = 4
+ANT_LIFE = 20
 SHOULD_FOOD_DECREASE = True
-SHOULD_FOOD_RESPAWN = True
+SHOULD_FOOD_RESPAWN = False
 
 DRAW_ANT_VISION = True
 DRAW_FOOD_DENSITY = True
 DRAW_PHEROMONES = True
 DRAW_PHEROMONE_VISION = True
-DRAW_FOOD_GRID = True
+DRAW_FOOD_GRID = False
 HIGHLIGHT_BEST_ANT = False
+DRAW_WALL_DISTANCE = True
 
 # 5 vision segments
+vision_segments = [
+    # Front arc: Directly in front of the agent
+    # red
+    ((-math.pi / 2, -3 * math.pi / 10), (255, 0, 0), 'forward_l1'),
+    # orange
+    ((-3 * math.pi / 10, -math.pi / 10), (255, 165, 0), 'forward_l2'),
+    # yellow
+    ((-math.pi / 10, math.pi / 10), (255, 255, 0), 'forward'),
+    # green
+    ((math.pi / 10, 3 * math.pi / 10), (0, 255, 0), 'forward_r2'),
+    # blue
+    ((3 * math.pi / 10, math.pi / 2), (0, 0, 255), 'forward_r1'),
+]
+
+# # 3 vision segments
 # vision_segments = [
-#     # Front arc: Directly in front of the agent
-#     # Bright red, intense and strong
-#     ((-math.pi / 2, -3 * math.pi / 10), (255, 0, 0), 'forward_l1'),
-#     # Vivid orange, warm and energetic
-#     ((-3 * math.pi / 10, -math.pi / 10), (255, 165, 0), 'forward_l2'),
-#     # Bright yellow, cheerful and vibrant
-#     ((-math.pi / 10, math.pi / 10), (255, 255, 0), 'forward'),
-#     # Bright green, fresh and lively
-#     ((math.pi / 10, 3 * math.pi / 10), (0, 255, 0), 'forward_r2'),
-#     # Sky blue, cool and calm
-#     ((3 * math.pi / 10, math.pi / 2), (0, 0, 255), 'forward_r1'),
+#     # red
+#     ((-math.pi / 2, -math.pi / 6), (255, 0, 0), 'forward_l1'),
+#     # yellow
+#     ((-math.pi / 6, math.pi / 6), (255, 255, 0), 'forward'),
+#     # blue
+#     ((math.pi / 6, math.pi / 2), (0, 0, 255), 'forward_r1'),
 # ]
 
-# 3 vision segments
-vision_segments = [
-    # Bright red, intense and strong
-    ((-math.pi / 2, -math.pi / 6), (255, 0, 0), 'forward_l1'),
-    # Bright yellow, cheerful and vibrant
+pheromone_detect_segments = [
+    # blue
+    ((-math.pi / 2, -math.pi / 6), (0, 0, 255), 'forward_l1'),
+    # yellow
     ((-math.pi / 6, math.pi / 6), (255, 255, 0), 'forward'),
-    # Sky blue, cool and calm
-    ((math.pi / 6, math.pi / 2), (0, 0, 255), 'forward_r1'),
+    # red
+    ((math.pi / 6, math.pi / 2), (255, 0, 0), 'forward_r1'),
+]
+
+segment_width = 2 * math.pi / 5  # 72 degrees
+half = segment_width / 2  # 36 degrees
+
+nest_detection_segments = [
+    (-5 * half, -3 * half, 0),  # back-left   (-180° to -108°)
+    (-3 * half, -half, 1),  # front-left  (-108° to  -36°)
+    (-half, half, 2),  # front       ( -36° to   36°)  ← centered
+    (half, 3 * half, 3),  # front-right (  36° to  108°)
+    (3 * half, 5 * half, 4),  # back-right  ( 108° to  180°)
+]
+
+wall_detection_rays = [
+    -math.pi / 3,  # left
+    0,  # front
+    math.pi / 3,  # right
 ]
 
 PHEROMONE_DETECTION_MAX_RANGE = MIN_VISION_RANGE
 PHEROMONE_DETECTION_MIN_RANGE = PHEROMONE_DETECTION_MAX_RANGE / 1.5
-PHEROMONE_TYPES = 3
-PHEROMONE_COLORS = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
-PHEROMONE_DECAY = 0.985
-PHEROMONE_DIFFUSION = 0.05
+PHEROMONE_TYPES = 2
+PHEROMONE_COLORS = [(255, 0, 0), (0, 0, 255)]
+PHEROMONE_DECAY = 0.992
+PHEROMONE_DIFFUSION = 0.03
+CLUSTER_ALPHA = 2.0
 PHEROMONE_DEPOSIT = 1.0
 MAX_PHEROMONE_CONCENTRATION_PER_ZONE = 6
 MAX_DETECTABLE_PHEROMONE_CONCENTRATION = 2
 MIN_DETECTABLE_PHEROMONE_CONCENTRATION = 0.01
 
-view_ranges = [MIN_VISION_RANGE, MIDDLE_VISION_RANGE, MAX_VISION_RANGE]
-pheromone_ranges = [PHEROMONE_DETECTION_MIN_RANGE, PHEROMONE_DETECTION_MAX_RANGE]
+view_ranges = [MAX_VISION_RANGE]
+pheromone_ranges = [PHEROMONE_DETECTION_MIN_RANGE]
 
 """
 Observation name and whether it should be used or not
@@ -130,7 +161,7 @@ def load_parameters(config_file):
     Load parameters from a configuration file and update the global variables.
     Parameters not found in the file will retain their default values.
     """
-    global SIM_FPS, SCREEN_W, SCREEN_H, BOUNDARY_SCALE, TIME_LIMIT, AGENT_SPEED, \
+    global SIM_FPS, SCREEN_W, SCREEN_H, BOUNDARY_SCALE, MAX_STEPS, AGENT_SPEED, \
         AGENT_ACCELERATION, TURN_RATE, MAX_FOOD_QUANTITY, FOOD_SIZE_SCALING, \
         ANT_CARRY_CAPACITY, ANT_LIFE, SHOULD_FOOD_DECREASE, SHOULD_FOOD_RESPAWN, \
         DRAW_ANT_VISION, DRAW_FOOD_DENSITY, DRAW_PHEROMONES, DRAW_PHEROMONE_VISION, \
@@ -146,7 +177,7 @@ def load_parameters(config_file):
         SCREEN_W = config.getint('Arena', 'SCREEN_W', fallback=SCREEN_W)
         SCREEN_H = config.getint('Arena', 'SCREEN_H', fallback=SCREEN_H)
         BOUNDARY_SCALE = config.getfloat('Arena', 'BOUNDARY_SCALE', fallback=BOUNDARY_SCALE)
-        TIME_LIMIT = config.getint('Arena', 'TIME_LIMIT', fallback=TIME_LIMIT)
+        MAX_STEPS = config.getint('Arena', 'TIME_LIMIT', fallback=MAX_STEPS)
         AGENT_SPEED = config.getfloat('Arena', 'AGENT_SPEED', fallback=AGENT_SPEED)
         AGENT_ACCELERATION = config.getfloat('Arena', 'AGENT_ACCELERATION', fallback=AGENT_ACCELERATION)
         TURN_RATE = config.getfloat('Arena', 'TURN_RATE', fallback=TURN_RATE)
@@ -166,8 +197,8 @@ def load_parameters(config_file):
         PHEROMONE_DEPOSIT = config.getfloat('Arena', 'PHEROMONE_DEPOSIT', fallback=PHEROMONE_DEPOSIT)
         MIN_DETECTABLE_PHEROMONE_CONCENTRATION = config.getfloat('Arena', 'MIN_DETECTABLE_PHEROMONE_CONCENTRATION', fallback=MIN_DETECTABLE_PHEROMONE_CONCENTRATION)
         MAX_DETECTABLE_PHEROMONE_CONCENTRATION = config.getfloat('Arena', 'MAX_DETECTABLE_PHEROMONE_CONCENTRATION', fallback=MAX_DETECTABLE_PHEROMONE_CONCENTRATION)
-        view_ranges = [MIN_VISION_RANGE, MIDDLE_VISION_RANGE, MAX_VISION_RANGE]
-        pheromone_ranges = [PHEROMONE_DETECTION_MIN_RANGE, PHEROMONE_DETECTION_MAX_RANGE]
+        view_ranges = [MAX_VISION_RANGE]
+        pheromone_ranges = [PHEROMONE_DETECTION_MIN_RANGE]
 
     # Update vision segments
     new_vision_segments = parse_vision_segments(config)
@@ -187,7 +218,7 @@ def save_parameters(dir_path):
         'SCREEN_W': SCREEN_W,
         'SCREEN_H': SCREEN_H,
         'BOUNDARY_SCALE': BOUNDARY_SCALE,
-        'TIME_LIMIT': TIME_LIMIT,
+        'TIME_LIMIT': MAX_STEPS,
         'AGENT_SPEED': AGENT_SPEED,
         'AGENT_ACCELERATION': AGENT_ACCELERATION,
         'TURN_RATE': TURN_RATE,

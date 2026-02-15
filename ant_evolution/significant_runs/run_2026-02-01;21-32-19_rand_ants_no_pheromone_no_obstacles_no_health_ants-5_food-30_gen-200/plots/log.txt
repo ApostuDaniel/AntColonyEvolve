@@ -1,0 +1,8 @@
+Average adjusted fitness: 0.142
+Mean genetic distance 1.151, standard deviation 0.406
+Population of 40 members in 1 species:
+   ID   age  size  fitness  adj fit  stag
+  ====  ===  ====  =======  =======  ====
+     1  199    40     10.0    0.142    50
+Total extinctions: 0
+Generation time: 19.659 sec (18.502 average)

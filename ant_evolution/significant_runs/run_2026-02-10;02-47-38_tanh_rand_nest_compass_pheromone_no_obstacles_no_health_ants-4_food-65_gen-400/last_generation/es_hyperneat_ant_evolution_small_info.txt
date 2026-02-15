@@ -1,0 +1,1 @@
+Best generation: 399, best fitness: 7.25
