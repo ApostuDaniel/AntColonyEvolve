@@ -186,3 +186,4 @@ fabric.properties
 /dev_tests
 /ant_evolution/alg_runs/
 /ant_evolution/alg_runs_single_colony/
+/ant_evolution/evaluation_results/
